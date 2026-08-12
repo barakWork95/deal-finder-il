@@ -38,7 +38,7 @@ export type Zoning =
 export type BadgeKind =
   | "motivated_seller" // מוכר לחוץ
   | "deadline_soon" // זמן קצר להגשה
-  | "below_average" // מחיר מתחת לממוצע
+  | "below_average" // מתחת לשומה (below the official appraisal)
   | "rezoning_potential"; // פוטנציאל השבחה (rezoning upside)
 
 export interface HistoricalTransaction {
@@ -86,7 +86,12 @@ export interface Deal {
 
   // computed
   estMarketValue: number;
-  discountPct: number; // positive = below market
+  /**
+   * Gap vs. the official appraisal (שומה), in percent. Positive = entry cost is
+   * below the appraisal. NOT a guaranteed discount: רמ"י tenders are
+   * competitive, so final prices land higher than the opening minimum bid.
+   */
+  discountPct: number;
   dealScore: number; // 0–100
 
   badges: BadgeKind[];

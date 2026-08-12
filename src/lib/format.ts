@@ -77,7 +77,7 @@ export const DEAL_TYPE_LABEL: Record<DealType, string> = {
 export const BADGE_LABEL: Record<BadgeKind, string> = {
   motivated_seller: "מוכר לחוץ",
   deadline_soon: "זמן קצר להגשה",
-  below_average: "מחיר מתחת לממוצע",
+  below_average: "מתחת לשומה",
   rezoning_potential: "פוטנציאל השבחה",
 };
 

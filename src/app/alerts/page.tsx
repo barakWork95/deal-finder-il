@@ -161,7 +161,7 @@ export default function AlertsPage() {
 
               <label className="block">
                 <span className="mb-1 block text-[11px] font-medium text-faint">
-                  אחוז דיסקאונט מינ׳: <span className="num">{minDiscount}%</span>
+                  פער משומה מינ׳: <span className="num">{minDiscount}%</span>
                 </span>
                 <input
                   type="range"
@@ -269,7 +269,7 @@ function AlertCard({
   const summary: string[] = [];
   if (f.cities?.length) summary.push(`עיר: ${f.cities.join(", ")}`);
   if (f.maxPrice) summary.push(`עד ${formatILSCompact(f.maxPrice)}`);
-  if (f.minDiscountPct) summary.push(`דיסקאונט ${f.minDiscountPct}%+`);
+  if (f.minDiscountPct) summary.push(`פער משומה ${f.minDiscountPct}%+`);
   if (f.minScore) summary.push(`ציון ${f.minScore}+`);
   if (f.dealTypes?.length) summary.push(f.dealTypes.map((t) => DEAL_TYPE_LABEL[t]).join(" · "));
 

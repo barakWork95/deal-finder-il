@@ -112,7 +112,7 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
             />
           </FilterField>
 
-          <FilterField label="אחוז דיסקאונט מינ׳">
+          <FilterField label="פער משומה מינ׳">
             <div className="flex gap-1">
               {DISCOUNT_PRESETS.map((p) => (
                 <button
@@ -177,7 +177,7 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
             מיון:
             <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="input">
               <option value="score">ציון עסקה</option>
-              <option value="discount">אחוז דיסקאונט</option>
+              <option value="discount">פער משומה</option>
               <option value="price_asc">מחיר (נמוך לגבוה)</option>
               <option value="deadline">מועד הגשה קרוב</option>
             </select>
@@ -244,8 +244,8 @@ function DealTable({ deals }: { deals: Deal[] }) {
             <Th>מיקום</Th>
             <Th>סוג עסקה</Th>
             <Th>שטח / ייעוד</Th>
-            <Th>מחיר מבוקש</Th>
-            <Th>דיסקאונט</Th>
+            <Th>עלות כניסה</Th>
+            <Th>פער משומה</Th>
             <Th>מועד הגשה</Th>
             <Th>תגיות</Th>
             <Th />
@@ -259,7 +259,7 @@ function DealTable({ deals }: { deals: Deal[] }) {
               </td>
               <td className="px-3 py-3">
                 <Link href={`/deal/${d.id}`} className="font-semibold text-primary hover:text-accent">
-                  {d.city} · {d.neighborhood}
+                  {[d.city, d.neighborhood].filter(Boolean).join(" · ")}
                 </Link>
                 <div className="text-xs text-muted">{d.propertyType}</div>
               </td>
@@ -314,7 +314,7 @@ function DealCards({ deals }: { deals: Deal[] }) {
           <div className="mb-3 flex items-start justify-between gap-2">
             <div>
               <h3 className="font-bold text-primary group-hover:text-accent">
-                {d.city} · {d.neighborhood}
+                {[d.city, d.neighborhood].filter(Boolean).join(" · ")}
               </h3>
               <p className="text-xs text-muted">{d.propertyType}</p>
             </div>

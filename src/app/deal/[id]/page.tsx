@@ -61,24 +61,31 @@ export default async function DealDetailPage({ params }: PageProps<"/deal/[id]">
 
             <div className="mt-5 flex flex-wrap items-end gap-x-8 gap-y-4">
               <div>
-                <div className="text-xs text-faint">מחיר מבוקש</div>
+                <div className="text-xs text-faint">עלות כניסה מינימלית</div>
                 <div className="num text-3xl font-black text-primary" dir="ltr">
                   {formatILS(deal.askingPrice)}
                 </div>
               </div>
               <div>
-                <div className="text-xs text-faint">דיסקאונט משוער</div>
+                <div className="text-xs text-faint">פער משומה</div>
                 <div className="text-2xl font-extrabold">
                   <DiscountTag pct={deal.discountPct} />
                 </div>
               </div>
               <div>
-                <div className="text-xs text-faint">שווי שוק מוערך</div>
+                <div className="text-xs text-faint">שומה רשמית</div>
                 <div className="num text-lg font-semibold text-muted" dir="ltr">
                   {formatILS(deal.estMarketValue)}
                 </div>
               </div>
             </div>
+
+            {deal.dealType === "rami_tender" && (
+              <p className="mt-3 text-[11px] leading-relaxed text-faint">
+                * עלות הכניסה מחושבת כמחיר המינימום בתוספת הוצאות הפיתוח. הפער משומה אינו הנחה מובטחת —
+                מכרזי רמ״י תחרותיים ומחירי הזכייה בפועל גבוהים ממחיר המינימום.
+              </p>
+            )}
 
             {/* Key facts grid */}
             <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -132,14 +139,21 @@ export default async function DealDetailPage({ params }: PageProps<"/deal/[id]">
               <h2 className="text-lg font-bold text-primary">ניתוח שוק השוואתי</h2>
               <span className="text-xs text-faint">נתוני רשות המסים · נדל״ן-נט</span>
             </div>
-            <p className="mb-4 text-sm text-muted">
-              הקרקע במחיר של{" "}
-              <span className="num font-bold text-primary">{formatPerSqm(subjectPerSqm)}</span> למ״ר —{" "}
-              <span className={perSqmDelta < 0 ? "font-bold text-positive" : "font-bold text-negative"}>
-                {perSqmDelta < 0 ? `${Math.abs(perSqmDelta)}% מתחת` : `${perSqmDelta}% מעל`} לממוצע האזורי
-              </span>{" "}
-              (<span className="num">{formatPerSqm(deal.areaAvgPricePerSqm)}</span> למ״ר קרקע).
-            </p>
+            {sortedComps.length > 0 ? (
+              <p className="mb-4 text-sm text-muted">
+                הקרקע במחיר של{" "}
+                <span className="num font-bold text-primary">{formatPerSqm(subjectPerSqm)}</span> למ״ר —{" "}
+                <span className={perSqmDelta < 0 ? "font-bold text-positive" : "font-bold text-negative"}>
+                  {perSqmDelta < 0 ? `${Math.abs(perSqmDelta)}% מתחת` : `${perSqmDelta}% מעל`} לממוצע האזורי
+                </span>{" "}
+                (<span className="num">{formatPerSqm(deal.areaAvgPricePerSqm)}</span> למ״ר קרקע).
+              </p>
+            ) : (
+              <p className="mb-4 text-sm text-muted">
+                הקרקע במחיר של{" "}
+                <span className="num font-bold text-primary">{formatPerSqm(subjectPerSqm)}</span> למ״ר קרקע.
+              </p>
+            )}
 
             {sortedComps.length === 0 ? (
               <p className="rounded-lg border border-dashed border-border bg-surface-2 p-6 text-center text-sm text-muted">
@@ -199,7 +213,7 @@ export default async function DealDetailPage({ params }: PageProps<"/deal/[id]">
             <ScoreChip score={deal.dealScore} size="lg" />
             <div className="mt-2 text-sm font-bold text-primary">ציון עסקה</div>
             <p className="mt-1 text-xs leading-relaxed text-muted">
-              מבוסס על הפער ממחיר הקרקע האזורי, פוטנציאל ההשבחה, ודחיפות מועד ההגשה.
+              מבוסס על הפער מהשומה הרשמית, פוטנציאל ההשבחה, ודחיפות מועד ההגשה.
             </p>
           </div>
 
