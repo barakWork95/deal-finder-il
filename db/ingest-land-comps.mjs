@@ -14,6 +14,9 @@
 //   DATABASE_URL=... node db/ingest-land-comps.mjs --since 2015
 //   DATABASE_URL=... node db/ingest-land-comps.mjs --limit 200
 import postgres from "postgres";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
 const BASE = "https://apps.land.gov.il/MichrazimSite";
 const API = `${BASE}/api`;
@@ -25,7 +28,7 @@ const SINCE_YEAR = args.includes("--since") ? Number(args[args.indexOf("--since"
 // Exclusive upper bound, so a backfill can skip years already ingested.
 const UNTIL_YEAR = args.includes("--until") ? Number(args[args.indexOf("--until") + 1]) : Infinity;
 const LIMIT = args.includes("--limit") ? Number(args[args.indexOf("--limit") + 1]) : Infinity;
-const DELAY_MS = 220;
+const DELAY_MS = 350; // be gentle on a public gov service
 
 const sql = postgres(process.env.DATABASE_URL || "postgres://localhost/deal_finder", {
   prepare: false,
@@ -49,6 +52,39 @@ async function http(url, init = {}) {
   return res;
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** GET JSON with backoff. The portal is intermittently flaky and answers with
+ *  an HTML error page (HTTP 404) rather than JSON when it is unhappy. */
+async function getJson(url, init = {}, attempts = 4) {
+  for (let a = 1; a <= attempts; a++) {
+    const res = await http(url, init);
+    const ct = res.headers.get("content-type") || "";
+    if (res.ok && ct.includes("json")) return res.json();
+    if (a === attempts) {
+      throw new Error(`${url} → ${res.status} ${ct.split(";")[0]} after ${attempts} attempts`);
+    }
+    await sleep(1500 * a * a); // 1.5s, 6s, 13.5s
+  }
+}
+
+/** Settlement code → Hebrew name. Cached in-repo so a flaky YeshuvimApi
+ *  cannot block an ingest; refreshed from the portal when it is reachable. */
+async function loadSettlements() {
+  try {
+    const live = await getJson(`${API}/YeshuvimApi/Get`, {}, 2);
+    const arr = Array.isArray(live) ? live : Object.values(live);
+    if (arr.length) {
+      console.log(`  settlements: ${arr.length} (live)`);
+      return new Map(arr.map((y) => [y.mtysvSemelYishuv, (y.mtysvShemYishuv || "").trim()]));
+    }
+  } catch {
+    /* fall through to the cache */
+  }
+  const file = join(dirname(fileURLToPath(import.meta.url)), "data/rmi_yeshuvim.json");
+  const cached = JSON.parse(readFileSync(file, "utf8"));
+  console.log(`  settlements: ${cached.length} (cached)`);
+  return new Map(cached.map((y) => [y.c, y.n]));
+}
 
 // RMI ייעוד code → our zoning + land category (same mapping as ingest-rami).
 const YEUD = {
@@ -95,15 +131,9 @@ async function main() {
   console.log("→ warming session…");
   await http(`${BASE}/`);
 
-  const yeshuvim = await (await http(`${API}/YeshuvimApi/Get`)).json();
-  const cityByCode = new Map(
-    (Array.isArray(yeshuvim) ? yeshuvim : Object.values(yeshuvim)).map((y) => [
-      y.mtysvSemelYishuv,
-      (y.mtysvShemYishuv || "").trim(),
-    ]),
-  );
+  const cityByCode = await loadSettlements();
 
-  const all = await (await http(`${API}/SearchApi/Search`, { method: "POST", body: "{}" })).json();
+  const all = await getJson(`${API}/SearchApi/Search`, { method: "POST", body: "{}" });
 
   // StatusMichraz 5 = נדון בוועדת מכרזים → winners decided, prices published.
   const closed = all
@@ -128,13 +158,21 @@ async function main() {
     )[0].id;
 
   let comps = 0;
+  let failed = 0;
   const premiums = [];
 
   for (const [i, t] of closed.entries()) {
     let detail;
     try {
-      detail = await (await http(`${API}/MichrazDetailsApi/Get?michrazID=${t.MichrazID}`)).json();
-    } catch {
+      detail = await getJson(`${API}/MichrazDetailsApi/Get?michrazID=${t.MichrazID}`, {}, 3);
+    } catch (e) {
+      failed++;
+      // If the portal has gone down entirely, stop rather than hammer it.
+      if (failed > 25) {
+        console.warn(`\n⚠ aborting: ${failed} consecutive-ish failures — portal appears down.`);
+        console.warn(`  ${comps} comps saved so far; re-run later to resume (upserts are idempotent).`);
+        break;
+      }
       continue;
     }
     await sleep(DELAY_MS);
