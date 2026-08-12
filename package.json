@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:migrate": "psql \"${DATABASE_URL:-postgres://localhost/deal_finder}\" -v ON_ERROR_STOP=1 -f db/001_schema.sql -f db/002_functions.sql -f db/004_land.sql -f db/005_land_comps.sql",
+    "db:migrate": "psql \"${DATABASE_URL:-postgres://localhost/deal_finder}\" -v ON_ERROR_STOP=1 -f db/001_schema.sql -f db/002_functions.sql -f db/004_land.sql -f db/005_land_comps.sql -f db/006_winning_premium.sql -f db/007_premium_score.sql",
     "db:postgis": "psql \"${DATABASE_URL:-postgres://localhost/deal_finder}\" -v ON_ERROR_STOP=1 -f db/003_postgis.sql",
     "db:seed": "node db/seed.mjs",
     "db:reset": "npm run db:migrate && npm run db:seed",

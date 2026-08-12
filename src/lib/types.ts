@@ -98,9 +98,23 @@ export interface Deal {
   rawDocumentUrl?: string;
   firstSeenAt: string;
 
+  // tender cost breakdown (רמ"י): entry cost = minBid + developmentCosts
+  minBid?: number;
+  developmentCosts?: number;
+
   // enrichment
   comps: HistoricalTransaction[];
   areaAvgPricePerSqm: number; // ₪ per m² of LAND in the area
+
+  /**
+   * Median historical premium of winning bids over the minimum bid for this
+   * city+zoning, as a ratio (3.69 = +369%). Undefined when too few past
+   * tenders back it. `winningPremiumN` is the sample size behind it.
+   */
+  winningPremium?: number;
+  winningPremiumN?: number;
+  /** minBid × (1 + winningPremium) + developmentCosts — what a bidder likely pays. */
+  expectedWinningPrice?: number;
 }
 
 export type AlertChannel = "whatsapp" | "telegram" | "email";

@@ -22,6 +22,8 @@ const UA =
 
 const args = process.argv.slice(2);
 const SINCE_YEAR = args.includes("--since") ? Number(args[args.indexOf("--since") + 1]) : 2020;
+// Exclusive upper bound, so a backfill can skip years already ingested.
+const UNTIL_YEAR = args.includes("--until") ? Number(args[args.indexOf("--until") + 1]) : Infinity;
 const LIMIT = args.includes("--limit") ? Number(args[args.indexOf("--limit") + 1]) : Infinity;
 const DELAY_MS = 220;
 
@@ -109,7 +111,7 @@ async function main() {
       if (t.StatusMichraz !== 5) return false;
       if (!MARKET_TENDER_TYPES.has(t.KodSugMichraz)) return false;
       const d = t.SgiraDate ? new Date(t.SgiraDate) : null;
-      return d && d.getFullYear() >= SINCE_YEAR;
+      return d && d.getFullYear() >= SINCE_YEAR && d.getFullYear() < UNTIL_YEAR;
     })
     .sort((a, b) => new Date(b.SgiraDate) - new Date(a.SgiraDate))
     .slice(0, LIMIT);

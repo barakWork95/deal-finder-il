@@ -28,6 +28,8 @@ function mapDeal(row: Record<string, unknown>, comps: HistoricalTransaction[], a
     zoning: (row.zoning as Zoning) ?? "מגורים",
     areaSqm: num(row.area_sqm),
     buildingRights: (row.building_rights as string) ?? undefined,
+    minBid: row.min_bid == null ? undefined : num(row.min_bid),
+    developmentCosts: row.development_costs == null ? undefined : num(row.development_costs),
     askingPrice: num(row.asking_price),
     submissionDeadline: iso(row.submission_deadline),
     estMarketValue: num(row.est_market_value),
@@ -92,7 +94,15 @@ export async function getDealById(id: string): Promise<Deal | undefined> {
 
   const comps = compRows.map(mapComp);
   const areaAvg = avg != null ? num(avg) : row.area_sqm ? Math.round(num(row.est_market_value) / num(row.area_sqm)) : 0;
-  return mapDeal(row, comps, areaAvg);
+  const deal = mapDeal(row, comps, areaAvg);
+
+  // Winning-premium signal is materialised on the row (see 007_premium_score).
+  if (row.winning_premium != null && row.expected_winning_price != null) {
+    deal.winningPremium = num(row.winning_premium);
+    deal.winningPremiumN = num(row.winning_premium_n);
+    deal.expectedWinningPrice = num(row.expected_winning_price);
+  }
+  return deal;
 }
 
 export async function listCities(): Promise<string[]> {

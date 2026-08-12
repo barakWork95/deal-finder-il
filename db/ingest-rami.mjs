@@ -205,6 +205,7 @@ async function main() {
         INSERT INTO deals
           (id, source_id, source_ref, deal_type, status, raw_address, city, street,
            neighborhood, gush, helka, property_type, zoning, building_rights, area_sqm,
+           min_bid, development_costs,
            asking_price, submission_deadline, est_market_value, discount_pct, deal_score,
            badges, raw_document_url, fingerprint, first_seen_at, last_updated_at)
         VALUES (
@@ -212,7 +213,8 @@ async function main() {
           ${`${propertyType}, ${(t.Shchuna || "").trim() || city}, ${city}`},
           ${city}, ${(t.Shchuna || "").trim() || city}, ${(t.Shchuna || "").trim() || null},
           ${gh?.Gush ?? null}, ${gh?.Helka ?? null}, ${propertyType}, ${zoning}, ${rights},
-          ${areaSqm}, ${askingPrice}, ${deadline}, ${estMarketValue}, ${discountPct},
+          ${areaSqm}, ${minBid}, ${development},
+          ${askingPrice}, ${deadline}, ${estMarketValue}, ${discountPct},
           ${scoreOf({ discountPct, daysLeft, zoning, hasAppraisal: appraisal > 0 })},
           ${badges}, ${`${BASE}/#/michraz/${t.MichrazID}`}, ${id}, now(), now()
         )

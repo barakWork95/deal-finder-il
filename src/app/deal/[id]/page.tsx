@@ -11,6 +11,7 @@ import {
 } from "@/lib/format";
 import { DealBadge, DealTypeChip, ScoreChip, DiscountTag } from "@/components/ui";
 import { LandCalculator } from "@/components/RoiCalculator";
+import { WinningPremium } from "@/components/WinningPremium";
 import { CmaChart } from "@/components/CmaChart";
 
 export default async function DealDetailPage({ params }: PageProps<"/deal/[id]">) {
@@ -216,6 +217,8 @@ export default async function DealDetailPage({ params }: PageProps<"/deal/[id]">
               מבוסס על הפער מהשומה הרשמית, פוטנציאל ההשבחה, ודחיפות מועד ההגשה.
             </p>
           </div>
+
+          <WinningPremium deal={deal} />
 
           <LandCalculator
             purchasePrice={deal.askingPrice}
