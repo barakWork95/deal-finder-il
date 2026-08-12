@@ -51,6 +51,20 @@ ABORTED="$(printf '%s' "$OUT" | grep -c 'aborting' || true)"
 
 if [ "$INGESTED" -gt 0 ] && [ "$ABORTED" -eq 0 ]; then
   printf '%s' "$OUT" | tail -3 | while IFS= read -r l; do log "  $l"; done
+
+  # Comps changed → refresh the winning-premium signal and Deal Scores.
+  # 008 is delta-based, so this is safe to run repeatedly.
+  PSQL="${PSQL_BIN:-/opt/homebrew/opt/postgresql@15/bin/psql}"
+  if [ -x "$PSQL" ] && [ -f "$DIR/008_premium_score_refresh.sql" ]; then
+    if REFRESH="$("$PSQL" "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$DIR/008_premium_score_refresh.sql" 2>&1)"; then
+      log "  premium signal refreshed ($(printf '%s' "$REFRESH" | grep -c UPDATE) statements)"
+    else
+      log "  WARN premium refresh failed: $(printf '%s' "$REFRESH" | tail -1 | sed -E 's#:[^@ ]+@#:****@#g')"
+    fi
+  else
+    log "  WARN skipped premium refresh (psql or 008 sql missing in staging dir)"
+  fi
+
   date '+%Y-%m-%dT%H:%M:%S%z' >"$MARKER"
   log "DONE — backfill complete; this job is now a no-op."
   log "Remove the schedule: launchctl bootout gui/\$(id -u)/com.dealfinder.backfill"

@@ -16,6 +16,7 @@ rm -rf "$STAGE/node_modules/postgres"
 cp -R "$REPO/node_modules/postgres" "$STAGE/node_modules/"
 cp "$REPO/.env.local" "$STAGE/.env.local"
 chmod 600 "$STAGE/.env.local"
+cp "$REPO/db/008_premium_score_refresh.sql" "$STAGE/"
 cp "$REPO/scripts/retry-backfill-staged.sh" "$STAGE/retry-backfill.sh"
 chmod +x "$STAGE/retry-backfill.sh"
 
