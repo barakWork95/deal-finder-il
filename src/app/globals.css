@@ -1,26 +1,219 @@
 @import "tailwindcss";
 
+/* ============================================================
+   Deal Finder IL — Design System
+   Dark  = "gaming/terminal": deep indigo-black canvas, electric
+           blue-violet primary, warm coral energy + radial glow.
+           (inspired by alloy.app)
+   Light = "clean dashboard": airy near-white, soft indigo-violet
+           primary, near-black indigo ink. (inspired by cube.dev)
+   Through-line accent = indigo/violet in both modes.
+   ============================================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* ---------- DARK (default) ---------- */
+  --bg: #070818;
+  --surface: #101334;
+  --surface-2: #171b3e;
+  --border: #262c50;
+  --border-strong: #373e69;
+  --text-primary: #edeffb;
+  --text-muted: #9ba2c9;
+  --text-faint: #646b95;
+
+  --accent: #5a6bff;          /* electric indigo-blue */
+  --accent-hover: #6f7dff;
+  --accent-soft: rgba(90, 107, 255, 0.16);
+  --accent-2: #ff7a5c;        /* coral energy (gaming highlight) */
+  --accent-2-soft: rgba(255, 122, 92, 0.16);
+
+  --positive: #2fe0a0;        /* neon mint */
+  --positive-soft: rgba(47, 224, 160, 0.15);
+  --warning: #ffb454;
+  --warning-soft: rgba(255, 180, 84, 0.15);
+  --negative: #ff5d6b;
+  --negative-soft: rgba(255, 93, 107, 0.15);
+
+  --ring: rgba(90, 107, 255, 0.45);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 12px 32px rgba(3, 4, 20, 0.55);
+  --score-track: #232a4d;
+  /* ambient glow + faint dot-grid layered under the app in dark mode */
+  --page-bg:
+    radial-gradient(1100px 480px at 50% -12%, rgba(90, 107, 255, 0.16), transparent 60%),
+    radial-gradient(820px 420px at 92% -6%, rgba(255, 122, 92, 0.09), transparent 55%),
+    radial-gradient(rgba(120, 134, 255, 0.045) 1px, transparent 1px);
+  --page-bg-size: 100% 100%, 100% 100%, 22px 22px;
+}
+
+:root[data-theme="light"] {
+  /* ---------- LIGHT ---------- */
+  --bg: #f7f8fc;
+  --surface: #ffffff;
+  --surface-2: #f2f3f9;
+  --border: #e7e8f1;
+  --border-strong: #d3d5e5;
+  --text-primary: #0f0f24;
+  --text-muted: #6a6a7c;
+  --text-faint: #9a9aae;
+
+  --accent: #6f6dee;          /* soft indigo-violet */
+  --accent-hover: #5a58e0;
+  --accent-soft: rgba(111, 109, 238, 0.10);
+  --accent-2: #ff6b52;
+  --accent-2-soft: rgba(255, 107, 82, 0.10);
+
+  --positive: #10b981;
+  --positive-soft: rgba(16, 185, 129, 0.10);
+  --warning: #d98200;
+  --warning-soft: rgba(217, 130, 0, 0.12);
+  --negative: #e5484d;
+  --negative-soft: rgba(229, 72, 77, 0.10);
+
+  --ring: rgba(111, 109, 238, 0.35);
+  --shadow: 0 1px 2px rgba(15, 15, 36, 0.05), 0 10px 28px rgba(15, 15, 36, 0.07);
+  --score-track: #e7e8f1;
+  --page-bg: none;
+  --page-bg-size: auto;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-primary: var(--text-primary);
+  --color-muted: var(--text-muted);
+  --color-faint: var(--text-faint);
+
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-2: var(--accent-2);
+  --color-accent-2-soft: var(--accent-2-soft);
+
+  --color-positive: var(--positive);
+  --color-positive-soft: var(--positive-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-negative: var(--negative);
+  --color-negative-soft: var(--negative-soft);
+
+  --font-sans: var(--font-sans-he), system-ui, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border);
+}
+
+html {
+  color-scheme: dark;
+}
+html[data-theme="light"] {
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--bg);
+  background-image: var(--page-bg);
+  background-size: var(--page-bg-size);
+  background-attachment: fixed;
+  color: var(--text-primary);
+  font-family: var(--font-sans-he), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.01em;
+}
+
+/* Numeric / money / scores — terminal-style monospace, LTR, tabular. */
+.num {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  font-variant-numeric: tabular-nums lining-nums;
+  direction: ltr;
+  unicode-bidi: isolate;
+  letter-spacing: -0.02em;
+}
+
+/* Deal Score as a conic progress ring (HUD). Fills --pct of the circle in the
+   tone color; center shows the number. Neon glow in dark mode. */
+.score-ring {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: conic-gradient(var(--tone) var(--pct), var(--score-track) 0);
+  transition: box-shadow 0.2s ease;
+}
+.score-ring::after {
+  content: "";
+  position: absolute;
+  inset: var(--ring-w);
+  border-radius: 50%;
+  background: var(--surface);
+}
+.score-ring > .score-ring-inner {
+  position: relative;
+  z-index: 1;
+  color: var(--tone);
+  line-height: 1;
+}
+:root:not([data-theme="light"]) .score-ring {
+  box-shadow: 0 0 18px -3px var(--tone);
+}
+
+/* Brand mark + primary CTA get an indigo→violet gradient; glow in dark. */
+.brand-mark {
+  background-image: linear-gradient(135deg, var(--accent), #8b5cff);
+}
+:root:not([data-theme="light"]) .brand-mark {
+  box-shadow: 0 0 16px -3px var(--accent);
+}
+.btn-primary {
+  background-image: linear-gradient(135deg, var(--accent), #7d63ff);
+}
+:root:not([data-theme="light"]) .btn-primary {
+  box-shadow: 0 6px 22px -8px var(--accent), 0 0 0 1px var(--accent-soft);
+}
+
+/* Hover: accent glow ring in dark (gaming pop). */
+:root:not([data-theme="light"]) .card-hover:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-soft), 0 10px 34px -14px var(--accent);
+}
+
+/* Shared form control */
+.input {
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 0.5rem 0.625rem;
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+select.input {
+  cursor: pointer;
+}
+
+/* Thin custom scrollbar for the terminal feel */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 6px;
+  border: 2px solid var(--bg);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
 }

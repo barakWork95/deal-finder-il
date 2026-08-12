@@ -6,10 +6,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:migrate": "psql \"${DATABASE_URL:-postgres://localhost/deal_finder}\" -v ON_ERROR_STOP=1 -f db/001_schema.sql -f db/002_functions.sql -f db/004_land.sql",
+    "db:postgis": "psql \"${DATABASE_URL:-postgres://localhost/deal_finder}\" -v ON_ERROR_STOP=1 -f db/003_postgis.sql",
+    "db:seed": "node db/seed.mjs",
+    "db:reset": "npm run db:migrate && npm run db:seed",
+    "db:ingest": "node db/ingest-nadlan.mjs"
   },
   "dependencies": {
+    "lucide-react": "^1.31.0",
     "next": "16.3.0",
+    "postgres": "^3.4.9",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
