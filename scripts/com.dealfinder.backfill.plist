@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Retries the pre-2018 land-comps backfill every 2 hours until it completes,
+  then becomes a no-op (the script short-circuits on its marker file).
+
+  NOTE the paths point at ~/Library/Application Support/deal-finder, NOT the
+  repo on ~/Desktop. macOS TCC blocks launchd-spawned processes from reading
+  Desktop/Documents ("Operation not permitted"), and staging avoids having to
+  grant Full Disk Access to /bin/bash. Re-stage after editing the ingest
+  script with:  npm run backfill:stage
+
+  Install:
+    cp scripts/com.dealfinder.backfill.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.dealfinder.backfill.plist
+  Status:
+    launchctl print gui/$(id -u)/com.dealfinder.backfill | head -20
+    tail -f ~/Library/Application\ Support/deal-finder/backfill.log
+  Remove:
+    launchctl bootout gui/$(id -u)/com.dealfinder.backfill
+    rm ~/Library/LaunchAgents/com.dealfinder.backfill.plist
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.dealfinder.backfill</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/barakvadei/Library/Application Support/deal-finder/retry-backfill.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/barakvadei/Library/Application Support/deal-finder</string>
+
+    <!-- Every 2 hours, plus once at load so a recovered portal is picked up
+         immediately rather than up to 2h later. -->
+    <key>StartInterval</key>
+    <integer>7200</integer>
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Background catch-up work: don't compete with the user for CPU/IO. -->
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>LowPriorityIO</key>
+    <true/>
+    <key>Nice</key>
+    <integer>5</integer>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/barakvadei/Library/Application Support/deal-finder/launchd.err.log</string>
+</dict>
+</plist>

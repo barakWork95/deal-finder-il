@@ -13,7 +13,8 @@
     "db:reset": "npm run db:migrate && npm run db:seed",
     "db:ingest": "node db/ingest-nadlan.mjs",
     "db:ingest:rami": "node db/ingest-rami.mjs",
-    "db:ingest:comps": "node db/ingest-land-comps.mjs"
+    "db:ingest:comps": "node db/ingest-land-comps.mjs",
+    "backfill:stage": "bash scripts/stage-backfill-job.sh"
   },
   "dependencies": {
     "lucide-react": "^1.31.0",

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BellPlus, LayoutGrid, Table2, Clock, ArrowLeft } from "lucide-react";
+import { BellPlus, LayoutGrid, Table2, Clock, ArrowLeft, Gavel } from "lucide-react";
 import type { Deal, DealType } from "@/lib/types";
 import {
   DEAL_TYPE_LABEL,
@@ -13,7 +13,7 @@ import {
 } from "@/lib/format";
 import { DealBadge, DealTypeChip, ScoreChip, DiscountTag } from "@/components/ui";
 
-type SortKey = "score" | "discount" | "price_asc" | "deadline";
+type SortKey = "score" | "discount" | "price_asc" | "deadline" | "expected_gap" | "premium";
 type ViewMode = "table" | "cards";
 
 const DEAL_TYPES: DealType[] = ["foreclosure", "rami_tender", "price_drop", "inheritance"];
@@ -38,6 +38,8 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
   const [maxPrice, setMaxPrice] = useState<number>(PRICE_MAX);
   const [minDiscount, setMinDiscount] = useState<number>(0);
   const [types, setTypes] = useState<DealType[]>([]);
+  // "Realistic" = expected winning price still below the official appraisal.
+  const [onlyRealistic, setOnlyRealistic] = useState(false);
   const [sort, setSort] = useState<SortKey>("score");
   const [view, setView] = useState<ViewMode>("table");
   const isMobile = useIsMobile();
@@ -52,6 +54,7 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
     setMaxPrice(PRICE_MAX);
     setMinDiscount(0);
     setTypes([]);
+    setOnlyRealistic(false);
   }
 
   const filtered = useMemo(() => {
@@ -61,12 +64,18 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
       if (d.askingPrice > maxPrice) return false;
       if (d.discountPct < minDiscount) return false;
       if (types.length && !types.includes(d.dealType)) return false;
+      if (onlyRealistic && !((d.expectedGapPct ?? -1) > 0)) return false;
       return true;
     });
+    const nullLast = (v: number | undefined) => (v == null ? -Infinity : v);
     result.sort((a, b) => {
       switch (sort) {
         case "discount":
           return b.discountPct - a.discountPct;
+        case "expected_gap":
+          return nullLast(b.expectedGapPct) - nullLast(a.expectedGapPct);
+        case "premium":
+          return nullLast(b.winningPremium) - nullLast(a.winningPremium);
         case "price_asc":
           return a.askingPrice - b.askingPrice;
         case "deadline": {
@@ -79,10 +88,14 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
       }
     });
     return result;
-  }, [deals, city, maxPrice, minDiscount, types, sort]);
+  }, [deals, city, maxPrice, minDiscount, types, sort, onlyRealistic]);
 
   const activeFilterCount =
-    (city ? 1 : 0) + (maxPrice < PRICE_MAX ? 1 : 0) + (minDiscount > 0 ? 1 : 0) + types.length;
+    (city ? 1 : 0) +
+    (maxPrice < PRICE_MAX ? 1 : 0) +
+    (minDiscount > 0 ? 1 : 0) +
+    types.length +
+    (onlyRealistic ? 1 : 0);
 
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-5">
@@ -148,6 +161,20 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
             </div>
           </FilterField>
 
+          <FilterField label="סינון חכם">
+            <button
+              onClick={() => setOnlyRealistic((v) => !v)}
+              title="מציג רק מכרזים שגם לאחר פרמיית הזכייה החזויה צפויים להישאר מתחת לשומה"
+              className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
+                onlyRealistic
+                  ? "border-positive bg-positive-soft text-positive"
+                  : "border-border bg-surface-2 text-muted hover:text-primary"
+              }`}
+            >
+              <Gavel size={13} /> מתחת לשומה גם אחרי פרמיה
+            </button>
+          </FilterField>
+
           <div className="ms-auto flex items-center gap-2">
             {activeFilterCount > 0 && (
               <button
@@ -177,6 +204,8 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
             מיון:
             <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="input">
               <option value="score">ציון עסקה</option>
+              <option value="expected_gap">פער חזוי (אחרי פרמיה)</option>
+              <option value="premium">פרמיית זכייה</option>
               <option value="discount">פער משומה</option>
               <option value="price_asc">מחיר (נמוך לגבוה)</option>
               <option value="deadline">מועד הגשה קרוב</option>
@@ -246,6 +275,7 @@ function DealTable({ deals }: { deals: Deal[] }) {
             <Th>שטח / ייעוד</Th>
             <Th>עלות כניסה</Th>
             <Th>פער משומה</Th>
+            <Th>פרמיית זכייה</Th>
             <Th>מועד הגשה</Th>
             <Th>תגיות</Th>
             <Th />
@@ -275,6 +305,9 @@ function DealTable({ deals }: { deals: Deal[] }) {
               </td>
               <td className="px-3 py-3 text-start" dir="ltr">
                 <DiscountTag pct={d.discountPct} />
+              </td>
+              <td className="px-3 py-3">
+                <PremiumCell deal={d} />
               </td>
               <td className="px-3 py-3">
                 <DeadlineCell iso={d.submissionDeadline} />
@@ -331,6 +364,30 @@ function DealCards({ deals }: { deals: Deal[] }) {
             <span>·</span>
             <span>ייעוד: {d.zoning}</span>
           </div>
+          {d.winningPremium != null && (
+            <div className="mb-3 flex items-center justify-between rounded-lg bg-surface-2 px-2.5 py-1.5 text-xs">
+              <span className="flex items-center gap-1 text-muted">
+                <Gavel size={12} /> פרמיית זכייה
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="num font-bold text-accent" dir="ltr">
+                  +{Math.round(d.winningPremium * 100)}%
+                </span>
+                {d.expectedGapPct != null && (
+                  <span
+                    className={`text-[10px] font-semibold ${
+                      d.expectedGapPct > 0 ? "text-positive" : "text-warning"
+                    }`}
+                  >
+                    {d.expectedGapPct > 0
+                      ? `חזוי ${Math.round(d.expectedGapPct)}% מתחת`
+                      : `חזוי ${Math.abs(Math.round(d.expectedGapPct))}% מעל`}
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
+
           <div className="mb-3 flex flex-wrap gap-1">
             <DealTypeChip type={d.dealType} />
             {d.badges.map((b) => (
@@ -345,6 +402,31 @@ function DealCards({ deals }: { deals: Deal[] }) {
           </div>
         </Link>
       ))}
+    </div>
+  );
+}
+
+/**
+ * Winning premium + whether the projected winning price still clears the
+ * appraisal. "—" when too little tender history backs a projection.
+ */
+function PremiumCell({ deal }: { deal: Deal }) {
+  if (deal.winningPremium == null) {
+    return <span className="text-xs text-faint">—</span>;
+  }
+  const stillUnder = (deal.expectedGapPct ?? 0) > 0;
+  return (
+    <div className="whitespace-nowrap">
+      <span className="num text-sm font-bold text-accent" dir="ltr">
+        +{Math.round(deal.winningPremium * 100)}%
+      </span>
+      {deal.expectedGapPct != null && (
+        <div className={`text-[10px] font-medium ${stillUnder ? "text-positive" : "text-warning"}`}>
+          {stillUnder
+            ? `חזוי: ${Math.abs(Math.round(deal.expectedGapPct))}% מתחת לשומה`
+            : `חזוי: ${Math.abs(Math.round(deal.expectedGapPct))}% מעל`}
+        </div>
+      )}
     </div>
   );
 }

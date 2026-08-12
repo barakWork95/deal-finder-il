@@ -115,6 +115,8 @@ export interface Deal {
   winningPremiumN?: number;
   /** minBid × (1 + winningPremium) + developmentCosts — what a bidder likely pays. */
   expectedWinningPrice?: number;
+  /** Gap of expectedWinningPrice vs the שומה, in percent. Positive = still below. */
+  expectedGapPct?: number;
 }
 
 export type AlertChannel = "whatsapp" | "telegram" | "email";

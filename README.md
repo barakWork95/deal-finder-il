@@ -69,6 +69,33 @@ winner also pays `HotzaotPituach` (development costs). So the stored
 UI shows — it is a gap vs. appraisal, **not** a guaranteed discount, since
 tenders are competitive and final prices land higher.
 
+## Scheduled backfill job (macOS)
+
+Historic comps are backfilled by a launchd agent that retries every 2 hours
+until it succeeds, then becomes a no-op:
+
+```bash
+npm run backfill:stage          # sync the job's staging copy from this repo
+cp scripts/com.dealfinder.backfill.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.dealfinder.backfill.plist
+```
+
+Status / logs / removal:
+
+```bash
+launchctl list | grep dealfinder                                  # 2nd column = last exit code
+tail -f ~/Library/Application\ Support/deal-finder/backfill.log
+launchctl bootout gui/$(id -u)/com.dealfinder.backfill            # stop it
+```
+
+**Why it runs from `~/Library/Application Support/deal-finder` and not this
+repo:** macOS TCC blocks launchd-spawned processes from reading
+`~/Desktop`/`~/Documents` (`Operation not permitted`). Staging the job outside
+those directories avoids having to grant Full Disk Access to `/bin/bash`.
+`npm run backfill:stage` re-syncs the staged copy — run it after editing
+`db/ingest-land-comps.mjs` or rotating `DATABASE_URL`. The staged copy includes
+`.env.local` (mode `600`).
+
 ## ⚠️ The real gate: data access
 
 - **nadlan.gov.il / רשות המסים is geo-blocked to Israeli IPs.** From outside

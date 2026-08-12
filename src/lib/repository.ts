@@ -40,6 +40,12 @@ function mapDeal(row: Record<string, unknown>, comps: HistoricalTransaction[], a
     firstSeenAt: iso(row.first_seen_at) ?? new Date().toISOString(),
     comps,
     areaAvgPricePerSqm: areaAvg,
+    // Winning-premium signal is materialised on the row (see 007_premium_score).
+    winningPremium: row.winning_premium == null ? undefined : num(row.winning_premium),
+    winningPremiumN: row.winning_premium_n == null ? undefined : num(row.winning_premium_n),
+    expectedWinningPrice:
+      row.expected_winning_price == null ? undefined : num(row.expected_winning_price),
+    expectedGapPct: row.expected_gap_pct == null ? undefined : num(row.expected_gap_pct),
   };
 }
 
@@ -94,15 +100,7 @@ export async function getDealById(id: string): Promise<Deal | undefined> {
 
   const comps = compRows.map(mapComp);
   const areaAvg = avg != null ? num(avg) : row.area_sqm ? Math.round(num(row.est_market_value) / num(row.area_sqm)) : 0;
-  const deal = mapDeal(row, comps, areaAvg);
-
-  // Winning-premium signal is materialised on the row (see 007_premium_score).
-  if (row.winning_premium != null && row.expected_winning_price != null) {
-    deal.winningPremium = num(row.winning_premium);
-    deal.winningPremiumN = num(row.winning_premium_n);
-    deal.expectedWinningPrice = num(row.expected_winning_price);
-  }
-  return deal;
+  return mapDeal(row, comps, areaAvg);
 }
 
 export async function listCities(): Promise<string[]> {

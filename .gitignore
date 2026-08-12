@@ -40,3 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 !.env.example
+
+# backfill job artefacts
+db/.backfill*.log
+db/.backfill-pre2018.done
