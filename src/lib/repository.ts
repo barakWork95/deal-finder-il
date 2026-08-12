@@ -82,8 +82,13 @@ export async function getDealById(id: string): Promise<Deal | undefined> {
   const compRows = await sql`
     SELECT * FROM get_comps(${row.city}, ${row.street}, ${row.gush ?? null},
                             ${row.lat ?? null}, ${row.lng ?? null}, 240, 8)`;
+  // Benchmark against the same zoning first (residential land vs residential
+  // land); fall back to all land in the city when that's too thin.
   const [{ avg } = { avg: null }] = await sql`
-    SELECT area_avg_price_per_sqm(${row.city}, NULL, 240) AS avg`;
+    SELECT COALESCE(
+      area_avg_price_per_sqm(${row.city}, ${row.zoning ?? null}, 240),
+      area_avg_price_per_sqm(${row.city}, NULL, 240)
+    ) AS avg`;
 
   const comps = compRows.map(mapComp);
   const areaAvg = avg != null ? num(avg) : row.area_sqm ? Math.round(num(row.est_market_value) / num(row.area_sqm)) : 0;

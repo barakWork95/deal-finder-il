@@ -72,7 +72,7 @@ export function CmaChart({
         strokeDasharray="5 4"
       />
       <text x={W - pad.right} y={avgY - 5} textAnchor="end" fontSize="10" fill="var(--text-muted)">
-        ממוצע אזורי
+        חציון אזורי
       </text>
 
       {/* comps line */}

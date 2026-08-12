@@ -137,14 +137,14 @@ export default async function DealDetailPage({ params }: PageProps<"/deal/[id]">
           <section className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow)]">
             <div className="mb-1 flex items-center justify-between">
               <h2 className="text-lg font-bold text-primary">ניתוח שוק השוואתי</h2>
-              <span className="text-xs text-faint">נתוני רשות המסים · נדל״ן-נט</span>
+              <span className="text-xs text-faint">תוצאות מכרזי קרקע · רמ״י</span>
             </div>
             {sortedComps.length > 0 ? (
               <p className="mb-4 text-sm text-muted">
                 הקרקע במחיר של{" "}
                 <span className="num font-bold text-primary">{formatPerSqm(subjectPerSqm)}</span> למ״ר —{" "}
                 <span className={perSqmDelta < 0 ? "font-bold text-positive" : "font-bold text-negative"}>
-                  {perSqmDelta < 0 ? `${Math.abs(perSqmDelta)}% מתחת` : `${perSqmDelta}% מעל`} לממוצע האזורי
+                  {perSqmDelta < 0 ? `${Math.abs(perSqmDelta)}% מתחת` : `${perSqmDelta}% מעל`} לחציון האזורי
                 </span>{" "}
                 (<span className="num">{formatPerSqm(deal.areaAvgPricePerSqm)}</span> למ״ר קרקע).
               </p>
