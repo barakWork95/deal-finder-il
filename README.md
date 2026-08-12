@@ -41,6 +41,34 @@ transactions) from **demo** opportunities. The current deal listings are
 illustrative; the historical comps for the Holon area (גוש 7166) are genuine
 records captured from the gov API.
 
+## Real data: רמ"י land tenders
+
+`db/ingest-rami.mjs` pulls **live land tenders** from the Israel Land Authority
+portal (`apps.land.gov.il/MichrazimSite`). Endpoints were discovered by
+inspecting the portal's own XHR calls:
+
+| Step | Endpoint | Gives |
+|---|---|---|
+| 1 | `GET /MichrazimSite/` | session cookie (**required**) |
+| 2 | `GET /api/GeneralTablesApi` | code→Hebrew lookups (ייעוד, סוג מכרז, סטטוס) |
+| 3 | `GET /api/YeshuvimApi/Get` | settlement code → city name (1,421) |
+| 4 | `POST /api/SearchApi/Search` `{}` | every tender (~10.6k, all years) |
+| 5 | `GET /api/MichrazDetailsApi/Get?michrazID=N` | per-plot area, prices, גוש/חלקה |
+
+All calls need `Accept: application/json` or the portal returns an HTML error page.
+
+```bash
+npm run db:ingest:rami              # active tenders only (~466 → ~335 plots)
+npm run db:ingest:rami -- --limit 20
+```
+
+**Pricing model (important).** `MechirSaf` is only the *opening minimum bid*; the
+winner also pays `HotzaotPituach` (development costs). So the stored
+`asking_price` = **minimum bid + development costs**, and `est_market_value` =
+`mechirShuma` (the official appraisal, שומה). The gap between them is what the
+UI shows — it is a gap vs. appraisal, **not** a guaranteed discount, since
+tenders are competitive and final prices land higher.
+
 ## ⚠️ The real gate: data access
 
 - **nadlan.gov.il / רשות המסים is geo-blocked to Israeli IPs.** From outside

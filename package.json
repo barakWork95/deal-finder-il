@@ -11,7 +11,8 @@
     "db:postgis": "psql \"${DATABASE_URL:-postgres://localhost/deal_finder}\" -v ON_ERROR_STOP=1 -f db/003_postgis.sql",
     "db:seed": "node db/seed.mjs",
     "db:reset": "npm run db:migrate && npm run db:seed",
-    "db:ingest": "node db/ingest-nadlan.mjs"
+    "db:ingest": "node db/ingest-nadlan.mjs",
+    "db:ingest:rami": "node db/ingest-rami.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.31.0",
