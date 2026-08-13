@@ -69,6 +69,26 @@ winner also pays `HotzaotPituach` (development costs). So the stored
 UI shows — it is a gap vs. appraisal, **not** a guaranteed discount, since
 tenders are competitive and final prices land higher.
 
+## Geocoding (map view)
+
+The רמ"י tender API carries no coordinates, so `db/geocode-deals.mjs` resolves
+each plot's גוש/חלקה against the open national parcel layer published by מרכז
+למיפוי ישראל (`open.govmap.gov.il/geoserver/opendata/wfs`, layer
+`opendata:PARCEL_ALL`) and stores the parcel polygon's centroid. Settlement
+centroids from OSM Nominatim are the fallback, and `deals.geo_precision`
+records which of the two a row got — the map labels settlement-level pins as
+approximate rather than passing them off as the plot.
+
+```bash
+npm run db:geocode              # only rows still missing coordinates
+npm run db:geocode -- --all     # re-geocode everything
+```
+
+Run it after `db:ingest:rami`, otherwise new tenders won't appear on the map.
+Lookups are cached in `db/data/geo_parcels.json` / `geo_cities.json`, so a
+re-run is nearly offline. A parcel that resolves more than 30 km from its
+settlement is rejected as a bad גוש match and falls back to the settlement.
+
 ## Scheduled backfill job (macOS)
 
 Historic comps are backfilled by a launchd agent that retries every 2 hours

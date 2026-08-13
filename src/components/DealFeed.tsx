@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { BellPlus, LayoutGrid, Table2, Clock, ArrowLeft, Gavel } from "lucide-react";
+import { BellPlus, LayoutGrid, Table2, Clock, ArrowLeft, Gavel, Map as MapIcon } from "lucide-react";
 import type { Deal, DealType } from "@/lib/types";
 import {
   DEAL_TYPE_LABEL,
@@ -14,7 +15,17 @@ import {
 import { DealBadge, DealTypeChip, ScoreChip, DiscountTag } from "@/components/ui";
 
 type SortKey = "score" | "discount" | "price_asc" | "deadline" | "expected_gap" | "premium";
-type ViewMode = "table" | "cards";
+type ViewMode = "table" | "cards" | "map";
+
+// Leaflet touches `window` at import time, so the map never prerenders.
+const DealMap = dynamic(() => import("@/components/DealMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="grid h-[clamp(420px,68vh,760px)] place-items-center rounded-xl border border-border bg-surface text-sm text-muted">
+      טוען מפה…
+    </div>
+  ),
+});
 
 const DEAL_TYPES: DealType[] = ["foreclosure", "rami_tender", "price_drop", "inheritance"];
 const DISCOUNT_PRESETS = [0, 10, 15, 20];
@@ -43,7 +54,8 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
   const [sort, setSort] = useState<SortKey>("score");
   const [view, setView] = useState<ViewMode>("table");
   const isMobile = useIsMobile();
-  const effectiveView: ViewMode = isMobile ? "cards" : view;
+  // The wide table has no phone layout; the map does, so it stays available.
+  const effectiveView: ViewMode = isMobile && view === "table" ? "cards" : view;
 
   function toggleType(t: DealType) {
     setTypes((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
@@ -211,12 +223,19 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
               <option value="deadline">מועד הגשה קרוב</option>
             </select>
           </label>
-          <div className="hidden rounded-lg border border-border bg-surface p-0.5 md:flex">
-            <ToggleBtn active={view === "cards"} onClick={() => setView("cards")}>
+          <div className="flex rounded-lg border border-border bg-surface p-0.5">
+            <ToggleBtn active={effectiveView === "cards"} onClick={() => setView("cards")}>
               <LayoutGrid size={14} /> כרטיסים
             </ToggleBtn>
-            <ToggleBtn active={view === "table"} onClick={() => setView("table")}>
+            <ToggleBtn
+              active={effectiveView === "table"}
+              onClick={() => setView("table")}
+              className="hidden md:inline-flex"
+            >
               <Table2 size={14} /> טבלה
+            </ToggleBtn>
+            <ToggleBtn active={effectiveView === "map"} onClick={() => setView("map")}>
+              <MapIcon size={14} /> מפה
             </ToggleBtn>
           </div>
         </div>
@@ -224,6 +243,8 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
 
       {filtered.length === 0 ? (
         <EmptyState onReset={reset} />
+      ) : effectiveView === "map" ? (
+        <DealMap deals={filtered} />
       ) : effectiveView === "table" ? (
         <DealTable deals={filtered} />
       ) : (
@@ -246,17 +267,19 @@ function ToggleBtn({
   active,
   onClick,
   children,
+  className = "",
 }: {
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-        active ? "bg-accent text-white" : "text-muted hover:text-primary"
-      }`}
+      className={`items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+        className || "inline-flex"
+      } ${active ? "bg-accent text-white" : "text-muted hover:text-primary"}`}
     >
       {children}
     </button>

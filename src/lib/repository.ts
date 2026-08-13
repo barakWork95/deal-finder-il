@@ -24,6 +24,7 @@ function mapDeal(row: Record<string, unknown>, comps: HistoricalTransaction[], a
     tatHelka: (row.tat_helka as string) ?? undefined,
     lat: num(row.lat),
     lng: num(row.lng),
+    geoPrecision: (row.geo_precision as Deal["geoPrecision"]) ?? undefined,
     propertyType: (row.property_type as PropertyType) ?? "מגרש למגורים",
     zoning: (row.zoning as Zoning) ?? "מגורים",
     areaSqm: num(row.area_sqm),

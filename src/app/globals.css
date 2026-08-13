@@ -162,13 +162,7 @@ body {
   box-shadow: 0 0 18px -3px var(--tone);
 }
 
-/* Brand mark + primary CTA get an indigo→violet gradient; glow in dark. */
-.brand-mark {
-  background-image: linear-gradient(135deg, var(--accent), #8b5cff);
-}
-:root:not([data-theme="light"]) .brand-mark {
-  box-shadow: 0 0 16px -3px var(--accent);
-}
+/* Primary CTA gets an indigo→violet gradient; glow in dark. */
 .btn-primary {
   background-image: linear-gradient(135deg, var(--accent), #7d63ff);
 }
@@ -216,4 +210,113 @@ select.input {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-faint);
+}
+
+/* ============================================================
+   Map view (Leaflet) — themed to the design system.
+   The map container is forced back to LTR: Leaflet positions its
+   own panes/controls with left/right offsets and mis-renders under
+   the page's dir=rtl. Our overlays set dir="rtl" themselves.
+   NOTE: leaflet.css is injected by the map chunk *after* this file,
+   so every override here is written with an extra :root to outrank
+   it on specificity rather than on order.
+   ============================================================ */
+:root .leaflet-container {
+  direction: ltr;
+  /* The basemap's own ground colour, so loading tiles don't flash. */
+  background: #090909;
+  font-family: var(--font-sans-he), system-ui, sans-serif;
+  z-index: 0; /* keep tiles under the app's own overlays */
+}
+:root[data-theme="light"] .leaflet-container {
+  background: #fafaf8;
+}
+
+/* Tiles landing on fractional device pixels (retina) left hairline gaps that
+   read as a grid of container-coloured lines across the map. Half a pixel of
+   overlap closes them — but only once Tailwind's preflight `img{max-width:100%}`
+   stops clamping the tile back to its inline 256px. Both need !important:
+   Leaflet writes the size inline. Tile size is Leaflet's default 256. */
+.leaflet-tile {
+  width: 256.5px !important;
+  height: 256.5px !important;
+  max-width: none !important;
+}
+
+:root .leaflet-control-zoom a,
+:root .leaflet-control-attribution {
+  background: var(--surface);
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+:root .leaflet-control-zoom a:hover {
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+:root .leaflet-control-attribution a {
+  color: var(--text-faint);
+}
+:root .leaflet-bar {
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+/* Keep Leaflet's zoom buttons clear of the map's own top overlay strip. */
+:root .leaflet-top.leaflet-left {
+  padding-top: 3rem;
+}
+
+/* Deal pin: tone-colored disc holding the score (or the plot count). */
+.map-pin-icon {
+  background: none;
+  border: 0;
+}
+.map-pin {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--pin-size);
+  height: var(--pin-size);
+}
+.map-pin-dot {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--pin-tone);
+  color: var(--pin-tone);
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 2px 10px rgba(3, 4, 20, 0.45);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+:root:not([data-theme="light"]) .map-pin-dot {
+  box-shadow: 0 0 14px -2px var(--pin-tone), 0 2px 10px rgba(3, 4, 20, 0.6);
+}
+
+/* Several plots on one point: filled disc + halo, so a count never reads as
+   a Deal Score. */
+.map-pin-many .map-pin-dot {
+  background: var(--pin-tone);
+  color: var(--bg);
+  border-color: transparent;
+}
+.map-pin-ring {
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 1px solid var(--pin-tone);
+  opacity: 0.45;
+  pointer-events: none;
+}
+.map-pin-icon:hover .map-pin-dot {
+  transform: scale(1.12);
+}
+.map-pin-active .map-pin-dot {
+  transform: scale(1.2);
+  background: var(--pin-tone);
+  color: var(--bg);
+  border-color: var(--pin-tone);
 }

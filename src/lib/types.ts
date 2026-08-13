@@ -73,6 +73,12 @@ export interface Deal {
   tatHelka?: string;
   lat: number;
   lng: number;
+  /**
+   * How the coordinates were resolved (db/geocode-deals.mjs):
+   * "parcel" = centroid of the registered גוש/חלקה, "city" = settlement
+   * centroid only. The map must not present a settlement centroid as the plot.
+   */
+  geoPrecision?: "parcel" | "city";
 
   // land
   propertyType: PropertyType; // סוג הקרקע

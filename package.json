@@ -7,17 +7,19 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:migrate": "psql \"${DATABASE_URL:-postgres://localhost/deal_finder}\" -v ON_ERROR_STOP=1 -f db/001_schema.sql -f db/002_functions.sql -f db/004_land.sql -f db/005_land_comps.sql -f db/006_winning_premium.sql -f db/007_premium_score.sql -f db/008_premium_score_refresh.sql",
+    "db:migrate": "psql \"${DATABASE_URL:-postgres://localhost/deal_finder}\" -v ON_ERROR_STOP=1 -f db/001_schema.sql -f db/002_functions.sql -f db/004_land.sql -f db/005_land_comps.sql -f db/006_winning_premium.sql -f db/007_premium_score.sql -f db/008_premium_score_refresh.sql -f db/009_geocode.sql",
     "db:postgis": "psql \"${DATABASE_URL:-postgres://localhost/deal_finder}\" -v ON_ERROR_STOP=1 -f db/003_postgis.sql",
     "db:seed": "node db/seed.mjs",
     "db:reset": "npm run db:migrate && npm run db:seed",
     "db:ingest": "node db/ingest-nadlan.mjs",
     "db:ingest:rami": "node db/ingest-rami.mjs",
     "db:ingest:comps": "node db/ingest-land-comps.mjs",
+    "db:geocode": "node db/geocode-deals.mjs",
     "backfill:stage": "bash scripts/stage-backfill-job.sh",
     "db:refresh-premium": "psql \"${DATABASE_URL}\" -v ON_ERROR_STOP=1 -f db/008_premium_score_refresh.sql"
   },
   "dependencies": {
+    "leaflet": "^1.9.4",
     "lucide-react": "^1.31.0",
     "next": "16.3.0",
     "postgres": "^3.4.9",
@@ -26,6 +28,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/leaflet": "^1.9.22",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, Bookmark, Bell, Share2, FileText, MapPin, Clock, type LucideIcon } from "lucide-react";
+import { ArrowRight, Bookmark, Bell, Share2, FileText, ExternalLink, Clock, type LucideIcon } from "lucide-react";
 import { getDealById } from "@/lib/repository";
 import {
   deadlineLabel,
@@ -13,6 +13,7 @@ import { DealBadge, DealTypeChip, ScoreChip, DiscountTag } from "@/components/ui
 import { LandCalculator } from "@/components/RoiCalculator";
 import { WinningPremium } from "@/components/WinningPremium";
 import { CmaChart } from "@/components/CmaChart";
+import DealLocationMap from "@/components/DealLocationMap";
 
 export default async function DealDetailPage({ params }: PageProps<"/deal/[id]">) {
   const { id } = await params;
@@ -107,8 +108,9 @@ export default async function DealDetailPage({ params }: PageProps<"/deal/[id]">
               </div>
             )}
 
-            {/* Deadline + source */}
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface-2 p-3">
+            {/* Deadline + source. Flex-wrap so the map panel can claim a full
+                row of its own below the buttons. */}
+            <div className="mt-5 flex flex-wrap items-center gap-3 rounded-lg bg-surface-2 p-3">
               <div className="flex items-center gap-2 text-sm">
                 <Clock size={16} className="text-warning" />
                 <span className="text-muted">מועד אחרון להגשה:</span>
@@ -117,17 +119,35 @@ export default async function DealDetailPage({ params }: PageProps<"/deal/[id]">
                 </span>
                 <span className="text-warning">({deadlineLabel(deal.submissionDeadline)})</span>
               </div>
-              <div className="flex gap-2">
+              {deal.rawDocumentUrl && (
                 <a
                   href={deal.rawDocumentUrl}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-primary transition hover:border-accent"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ms-auto inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-primary transition hover:border-accent"
                 >
                   <FileText size={14} /> מסמך מקור
+                  <ExternalLink size={11} className="text-faint" />
                 </a>
-                <button className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-primary transition hover:border-accent">
-                  <MapPin size={14} /> מפה
-                </button>
-              </div>
+              )}
+              {deal.lat && deal.lng ? (
+                <DealLocationMap
+                  deal={{
+                    lat: deal.lat,
+                    lng: deal.lng,
+                    dealScore: deal.dealScore,
+                    geoPrecision: deal.geoPrecision,
+                    city: deal.city,
+                    neighborhood: deal.neighborhood,
+                    gush: deal.gush,
+                    helka: deal.helka,
+                  }}
+                />
+              ) : (
+                <span className="text-xs text-faint" title="למכרז זה אין גוש/חלקה שניתן לאתר">
+                  אין מיקום זמין
+                </span>
+              )}
             </div>
             <p className="mt-2 text-xs text-faint">
               מקור: {deal.sourceName} · נצפה לראשונה: {formatDate(deal.firstSeenAt)}
