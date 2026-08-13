@@ -7,7 +7,7 @@ import { BellPlus, LayoutGrid, Table2, Clock, ArrowLeft, Gavel, Map as MapIcon }
 import type { Deal, DealType } from "@/lib/types";
 import {
   DEAL_TYPE_LABEL,
-  deadlineLabel,
+  deadlineInfo,
   formatILS,
   formatILSCompact,
   formatLandArea,
@@ -495,8 +495,7 @@ function PremiumCell({ deal }: { deal: Deal }) {
 }
 
 function DeadlineCell({ iso }: { iso?: string }) {
-  const label = deadlineLabel(iso);
-  const urgent = iso ? new Date(iso).getTime() - Date.now() < 6 * 864e5 : false;
+  const { label, urgent } = deadlineInfo(iso);
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-medium ${urgent ? "text-warning" : "text-muted"}`}>
       {iso && <Clock size={13} />} {label}

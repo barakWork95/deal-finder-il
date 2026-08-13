@@ -19,12 +19,13 @@ const PLANS: Plan[] = [
     price: "₪0",
     tagline: "להתחיל לעקוב אחרי מכרזי קרקע",
     features: [
-      { label: "התראות אימייל", included: true },
-      { label: "סיכום יומי ושבועי", included: true },
-      { label: "פיד המכרזים המלא, מפה וניתוח שוק", included: true },
-      { label: "התראות WhatsApp מיידיות", included: false },
+      { label: "סיכום אימייל יומי/שבועי בלבד (דיליי שליחה)", included: true },
+      { label: "עד 2 התראות פעילות", included: true },
+      { label: "עד 3 עסקאות שמורות", included: true },
+      { label: "מפה ופיד מכרזים", included: true },
+      { label: "התראות WhatsApp ו-Email מיידיות", included: false },
       { label: "סינון אוטומטי לפי ציון עסקה 80+", included: false },
-      { label: "עסקאות שמורות ללא הגבלה", included: false },
+      { label: "מחשבון פרמיית זכייה מלא", included: false },
     ],
   },
   {
@@ -34,11 +35,11 @@ const PLANS: Plan[] = [
     period: "לחודש",
     tagline: "להגיע למכרז הנכון לפני כולם",
     features: [
-      { label: "כל מה שבמסלול החינם", included: true },
-      { label: "התראות WhatsApp מיידיות", included: true },
+      { label: "התראות WhatsApp ו-Email מיידיות (Instant)", included: true },
+      { label: "התראות ועסקאות שמורות ללא הגבלה", included: true },
       { label: "סינון אוטומטי לפי ציון עסקה 80+", included: true },
-      { label: "עסקאות שמורות ללא הגבלה", included: true },
-      { label: "פרמיית זכייה חזויה על כל מכרז", included: true },
+      { label: "מחשבון פרמיית זכייה מלא", included: true },
+      { label: "מפה ופיד מכרזים", included: true },
       { label: "ביטול בכל עת", included: true },
     ],
   },
@@ -60,7 +61,8 @@ export function BillingPanel() {
         <Sparkles size={14} className="mt-px shrink-0 text-accent" />
         <span>
           בתקופת ההרצה <span className="font-semibold text-primary">כל היכולות פתוחות לכולם</span> ללא
-          תשלום — כולל אלה שמסומנות כאן כ-PRO. הטבלה מתארת את המסלולים כפי שייכנסו לתוקף בהמשך.
+          תשלום, וללא המגבלות המופיעות במסלול החינם. הטבלה מתארת את המסלולים כפי שייכנסו לתוקף
+          בהמשך.
         </span>
       </p>
 

@@ -165,7 +165,7 @@ async function main() {
     let detail;
     try {
       detail = await getJson(`${API}/MichrazDetailsApi/Get?michrazID=${t.MichrazID}`, {}, 3);
-    } catch (e) {
+    } catch {
       failed++;
       // If the portal has gone down entirely, stop rather than hammer it.
       if (failed > 25) {

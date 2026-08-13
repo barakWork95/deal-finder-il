@@ -65,6 +65,23 @@ export function deadlineLabel(iso?: string, now?: Date): string {
   return `בעוד ${d} ימים`;
 }
 
+/** Deadlines this close are worth colouring. */
+const URGENT_DAYS = 6;
+
+/**
+ * Label plus urgency from a single reading of the clock, so a component never
+ * has to check the time itself (an impure call during render) and the two can
+ * never disagree about the same deadline.
+ */
+export function deadlineInfo(iso?: string, now?: Date): { label: string; urgent: boolean } {
+  const reference = now ?? new Date();
+  const days = daysUntil(iso, reference);
+  return {
+    label: deadlineLabel(iso, reference),
+    urgent: days !== null && days >= 0 && days < URGENT_DAYS,
+  };
+}
+
 export const DEAL_TYPE_LABEL: Record<DealType, string> = {
   rami_tender: 'מכרז רמ"י',
   foreclosure: "כינוס נכסים",

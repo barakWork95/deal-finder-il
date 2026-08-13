@@ -4,7 +4,6 @@ import postgres from "postgres";
 // just point DATABASE_URL at your Supabase connection string. If DATABASE_URL is
 // unset, the repository falls back to in-memory mock data.
 declare global {
-  // eslint-disable-next-line no-var
   var __sql: ReturnType<typeof postgres> | undefined;
 }
 

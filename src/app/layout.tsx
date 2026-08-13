@@ -3,6 +3,7 @@ import { Assistant, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AppHeader } from "@/components/AppHeader";
 import { MobileNav } from "@/components/MobileNav";
+import { AuthProvider } from "@/components/AuthProvider";
 
 // Hebrew UI: Assistant — modern, elegant, highly legible in both themes.
 const assistant = Assistant({
@@ -51,9 +52,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
-        <AppHeader />
-        <main className="flex-1 pb-20 md:pb-0">{children}</main>
-        <MobileNav />
+        {/* Pass-through until Clerk is switched on — see AuthProvider. */}
+        <AuthProvider>
+          <AppHeader />
+          <main className="flex-1 pb-20 md:pb-0">{children}</main>
+          <MobileNav />
+        </AuthProvider>
       </body>
     </html>
   );

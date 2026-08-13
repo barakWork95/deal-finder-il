@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# A new push to the same branch makes an in-flight run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      # No DATABASE_URL here on purpose: the repository layer falls back to
+      # mock data without one (src/lib/repository.ts), and every page that
+      # reads tenders is force-dynamic, so nothing touches Postgres at build
+      # time. CI therefore needs no secrets.
+      - run: npm run build

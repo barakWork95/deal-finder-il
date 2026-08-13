@@ -91,6 +91,27 @@ Lookups are cached in `db/data/geo_parcels.json` / `geo_cities.json`, so a
 re-run is nearly offline. A parcel that resolves more than 30 km from its
 settlement is rejected as a bad גוש match and falls back to the settlement.
 
+## CI
+
+`.github/workflows/ci.yml` runs `npm ci`, `npm run lint` and `npm run build` on
+every push and pull request. It needs **no secrets**: without `DATABASE_URL` the
+repository layer falls back to mock data, and every page that reads tenders is
+`force-dynamic`, so nothing touches Postgres at build time.
+
+## Auth (Clerk) — prepared, not switched on
+
+`src/components/AuthProvider.tsx` wraps the app and is a pass-through today.
+`@clerk/nextjs` is deliberately **not** installed: `ClerkProvider` throws
+without a publishable key, so wrapping the app before the keys exist would break
+production rather than prepare it. That file carries the full switch-on
+checklist (install, env vars, middleware, header buttons); Google and email
+sign-in are enabled in the Clerk dashboard, not in code.
+
+Until then the personal area is per-browser — alerts, saved deals and profile
+live in `localStorage` (`src/lib/client-store.ts`). Accounts are what will let
+that data follow a user across devices, and what makes actually *sending* an
+alert possible.
+
 ## Scheduled backfill job (macOS)
 
 Historic comps are backfilled by a launchd agent that retries every 2 hours
