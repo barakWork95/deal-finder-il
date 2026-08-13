@@ -35,11 +35,15 @@ export function PersonalArea({ deals, cities }: { deals: Deal[]; cities: string[
     <div className="mx-auto max-w-[1200px] px-4 py-5">
       <div className="grid gap-5 lg:grid-cols-[220px_1fr]">
         {/* Sidebar — a scrollable tab strip on phones */}
-        <aside className="lg:sticky lg:top-20 lg:self-start">
+        {/* min-w-0: without it the grid item grows to the tab strip's full
+            content width instead of letting the strip scroll inside it. */}
+        <aside className="min-w-0 lg:sticky lg:top-20 lg:self-start">
           <h2 className="mb-3 hidden px-2 text-sm font-bold text-primary lg:block">אזור אישי</h2>
           <nav
             aria-label="אזור אישי"
-            className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-col lg:overflow-visible lg:px-0 lg:pb-0"
+            // No negative-margin bleed: it would make the strip wider than the
+            // page and give the whole document a horizontal scrollbar.
+            className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0"
           >
             {TABS.map(({ key, label, icon: Icon }) => {
               const active = tab === key;
