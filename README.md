@@ -98,19 +98,41 @@ every push and pull request. It needs **no secrets**: without `DATABASE_URL` the
 repository layer falls back to mock data, and every page that reads tenders is
 `force-dynamic`, so nothing touches Postgres at build time.
 
-## Auth (Clerk) — prepared, not switched on
+## Auth (Clerk)
 
-`src/components/AuthProvider.tsx` wraps the app and is a pass-through today.
-`@clerk/nextjs` is deliberately **not** installed: `ClerkProvider` throws
-without a publishable key, so wrapping the app before the keys exist would break
-production rather than prepare it. That file carries the full switch-on
-checklist (install, env vars, middleware, header buttons); Google and email
-sign-in are enabled in the Clerk dashboard, not in code.
+Sign-in is Clerk (Google + email), wired through `src/components/AuthProvider.tsx`,
+`src/components/AuthButtons.tsx` and `src/proxy.ts` (Next 16 renamed the
+`middleware` convention to `proxy`).
 
-Until then the personal area is per-browser — alerts, saved deals and profile
-live in `localStorage` (`src/lib/client-store.ts`). Accounts are what will let
-that data follow a user across devices, and what makes actually *sending* an
-alert possible.
+**Every Clerk touchpoint is guarded by `isAuthConfigured()`** (`src/lib/auth.ts`),
+which checks `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`. Without the key the app runs
+exactly as it did before auth: the header shows an inert avatar, the proxy skips
+Clerk, and `/api/user/sync` answers `501 auth_not_configured`. That keeps CI,
+forks and local previews working without secrets — and means a missing variable
+degrades to "no sign-in" instead of a blank site.
+
+```bash
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...   # pk_live_... in production
+CLERK_SECRET_KEY=sk_test_...                    # sk_live_... in production
+```
+
+Set both in `.env.local` **and** in Vercel → Settings → Environment Variables.
+Google, email and the application name shown in the sign-in modal are configured
+in the Clerk dashboard, not in code.
+
+### Local data → account
+
+The personal area starts per-browser: alerts, saved deals and profile live in
+`localStorage` (`src/lib/client-store.ts`). On the first sign-in in a given
+browser, `src/components/personal/UserSync.tsx` posts that data to
+`POST /api/user/sync`, which merges it into `user_alerts` / `user_saved_deals`
+(`db/010_user_data.sql`) and returns the union, which the client then adopts.
+
+The merge never replaces: signing in on a second device with different local
+data adds to the account rather than overwriting the first device. Alerts upsert
+by id (re-syncing the same browser is a no-op) and saved ids that no longer
+match a live tender are dropped. `GET /api/user/sync` returns the account's
+current data.
 
 ## Scheduled backfill job (macOS)
 

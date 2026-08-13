@@ -10,6 +10,7 @@ import { AlertsPanel } from "@/components/personal/AlertsPanel";
 import { SavedDealsPanel } from "@/components/personal/SavedDealsPanel";
 import { AccountPanel } from "@/components/personal/AccountPanel";
 import { BillingPanel } from "@/components/personal/BillingPanel";
+import { UserSync } from "@/components/personal/UserSync";
 
 type TabKey = PersonalTab;
 
@@ -117,12 +118,15 @@ export function PersonalArea({
           </div>
         </aside>
 
-        {/* `key` restarts the entrance animation on every tab switch. */}
-        <div key={tab} className="panel-in min-w-0">
+        <div className="min-w-0">
+          <UserSync />
+          {/* `key` restarts the entrance animation on every tab switch. */}
+          <div key={tab} className="panel-in">
           {tab === "alerts" && <AlertsPanel deals={deals} cities={cities} prefill={prefill} />}
           {tab === "saved" && <SavedDealsPanel deals={deals} />}
           {tab === "account" && <AccountPanel />}
-          {tab === "billing" && <BillingPanel />}
+            {tab === "billing" && <BillingPanel />}
+          </div>
         </div>
       </div>
     </div>

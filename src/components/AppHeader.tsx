@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Search, Bell } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { BrandMark } from "./BrandMark";
+import { AuthButtons } from "./AuthButtons";
 
 function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
@@ -56,9 +57,7 @@ export function AppHeader() {
             </span>
           </Link>
           <ThemeToggle />
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-2 text-sm font-bold text-primary">
-            ב
-          </div>
+          <AuthButtons />
         </div>
       </div>
     </header>

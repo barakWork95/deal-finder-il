@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:migrate": "psql \"${DATABASE_URL:-postgres://localhost/deal_finder}\" -v ON_ERROR_STOP=1 -f db/001_schema.sql -f db/002_functions.sql -f db/004_land.sql -f db/005_land_comps.sql -f db/006_winning_premium.sql -f db/007_premium_score.sql -f db/008_premium_score_refresh.sql -f db/009_geocode.sql",
+    "db:migrate": "psql \"${DATABASE_URL:-postgres://localhost/deal_finder}\" -v ON_ERROR_STOP=1 -f db/001_schema.sql -f db/002_functions.sql -f db/004_land.sql -f db/005_land_comps.sql -f db/006_winning_premium.sql -f db/007_premium_score.sql -f db/008_premium_score_refresh.sql -f db/009_geocode.sql -f db/010_user_data.sql",
     "db:postgis": "psql \"${DATABASE_URL:-postgres://localhost/deal_finder}\" -v ON_ERROR_STOP=1 -f db/003_postgis.sql",
     "db:seed": "node db/seed.mjs",
     "db:reset": "npm run db:migrate && npm run db:seed",
@@ -19,6 +19,8 @@
     "db:refresh-premium": "psql \"${DATABASE_URL}\" -v ON_ERROR_STOP=1 -f db/008_premium_score_refresh.sql"
   },
   "dependencies": {
+    "@clerk/localizations": "^4.15.1",
+    "@clerk/nextjs": "^7.7.4",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.31.0",
     "next": "16.3.0",
