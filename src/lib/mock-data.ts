@@ -400,7 +400,7 @@ export const ALERTS: Alert[] = [
     id: "a-2",
     name: "קרקע להשבחה — ציון 85+",
     filters: { minScore: 85, dealTypes: ["private_sale"] },
-    channels: ["telegram"],
+    channels: ["whatsapp"],
     frequency: "daily",
     isActive: true,
     triggeredThisMonth: 9,

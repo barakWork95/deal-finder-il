@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, Bookmark, Bell, Share2, FileText, ExternalLink, Clock, type LucideIcon } from "lucide-react";
+import { ArrowRight, Bell, Share2, FileText, ExternalLink, Clock, type LucideIcon } from "lucide-react";
 import { getDealById } from "@/lib/repository";
 import {
   deadlineLabel,
@@ -14,6 +14,7 @@ import { LandCalculator } from "@/components/RoiCalculator";
 import { WinningPremium } from "@/components/WinningPremium";
 import { CmaChart } from "@/components/CmaChart";
 import DealLocationMap from "@/components/DealLocationMap";
+import { SaveDealButton } from "@/components/SaveDealButton";
 
 export default async function DealDetailPage({ params }: PageProps<"/deal/[id]">) {
   const { id } = await params;
@@ -36,7 +37,7 @@ export default async function DealDetailPage({ params }: PageProps<"/deal/[id]">
           <ArrowRight size={16} /> חזרה לפיד
         </Link>
         <div className="flex flex-wrap gap-2">
-          <ActionBtn icon={Bookmark}>שמירה</ActionBtn>
+          <SaveDealButton dealId={deal.id} variant="labelled" />
           <ActionBtn icon={Bell}>התראה דומה</ActionBtn>
           <ActionBtn icon={Share2}>שיתוף</ActionBtn>
         </div>

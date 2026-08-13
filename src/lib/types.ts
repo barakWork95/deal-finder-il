@@ -125,7 +125,8 @@ export interface Deal {
   expectedGapPct?: number;
 }
 
-export type AlertChannel = "whatsapp" | "telegram" | "email";
+// WhatsApp + email only — Telegram was dropped from the product.
+export type AlertChannel = "whatsapp" | "email";
 export type AlertFrequency = "instant" | "daily" | "weekly";
 
 export interface Alert {

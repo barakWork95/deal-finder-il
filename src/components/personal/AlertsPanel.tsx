@@ -1,0 +1,316 @@
+"use client";
+
+import { useState } from "react";
+import { Mail, MessageCircle, Pause, Play, Trash2, Info, Plus, type LucideIcon } from "lucide-react";
+import type { Alert, AlertChannel, AlertFrequency, DealType } from "@/lib/types";
+import { DEAL_TYPE_LABEL, formatILSCompact } from "@/lib/format";
+import { ALERTS_KEY, useProfile, useStoredState } from "@/lib/client-store";
+import { Chip, EmptyState, Field, IconBtn } from "@/components/personal/controls";
+
+export const CHANNELS: { key: AlertChannel; label: string; icon: LucideIcon }[] = [
+  { key: "whatsapp", label: "WhatsApp", icon: MessageCircle },
+  { key: "email", label: "אימייל", icon: Mail },
+];
+
+const FREQ: { key: AlertFrequency; label: string }[] = [
+  { key: "instant", label: "מיידי" },
+  { key: "daily", label: "סיכום יומי" },
+  { key: "weekly", label: "סיכום שבועי" },
+];
+
+const DEAL_TYPES: DealType[] = ["rami_tender", "foreclosure", "price_drop", "inheritance"];
+
+const NO_ALERTS: Alert[] = [];
+
+export function AlertsPanel({ cities }: { cities: string[] }) {
+  const [alerts, setAlerts] = useStoredState<Alert[]>(ALERTS_KEY, NO_ALERTS);
+  const [profile] = useProfile();
+  const [justSaved, setJustSaved] = useState<string | null>(null);
+
+  // Query builder
+  const [name, setName] = useState("");
+  const [city, setCity] = useState("");
+  const [maxPrice, setMaxPrice] = useState(3_000_000);
+  const [minDiscount, setMinDiscount] = useState(15);
+  const [minScore, setMinScore] = useState(80);
+  const [types, setTypes] = useState<DealType[]>(["rami_tender"]);
+  const [channels, setChannels] = useState<AlertChannel[]>(["email"]);
+  const [frequency, setFrequency] = useState<AlertFrequency>("instant");
+
+  function toggle<T>(list: T[], item: T, setter: (v: T[]) => void) {
+    setter(list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
+  }
+
+  function saveAlert() {
+    if (channels.length === 0) return;
+    const alert: Alert = {
+      id: `a-${Date.now()}`,
+      name: name.trim() || `התראה · ${city || "כל הערים"}`,
+      filters: {
+        cities: city ? [city] : undefined,
+        maxPrice,
+        minDiscountPct: minDiscount || undefined,
+        minScore: minScore || undefined,
+        dealTypes: types.length ? types : undefined,
+      },
+      channels,
+      frequency,
+      isActive: true,
+      triggeredThisMonth: 0,
+    };
+    setAlerts((prev) => [alert, ...prev]);
+    setName("");
+    setJustSaved(alert.id);
+  }
+
+  // A channel with nowhere to send to is worth flagging before it silently
+  // does nothing.
+  const missingEmail = channels.includes("email") && !profile.email;
+  const missingPhone = channels.includes("whatsapp") && !profile.phone;
+
+  return (
+    <div className="space-y-5">
+      <section>
+        <div className="mb-3 flex items-baseline justify-between gap-3">
+          <h1 className="text-xl font-extrabold text-primary">ההתראות שלי</h1>
+          {alerts.length > 0 && (
+            <span className="text-xs text-faint">
+              <span className="num font-semibold text-muted">{alerts.filter((a) => a.isActive).length}</span>{" "}
+              פעילות מתוך <span className="num">{alerts.length}</span>
+            </span>
+          )}
+        </div>
+
+        <p className="mb-3 flex items-start gap-2 rounded-lg border border-border bg-surface-2 p-3 text-[11px] leading-relaxed text-muted">
+          <Info size={14} className="mt-px shrink-0 text-accent" />
+          <span>
+            ההתראות נשמרות בדפדפן הזה בלבד. השליחה בפועל ב-WhatsApp ובאימייל תופעל עם חיבור החשבון —
+            כרגע זו הגדרת הסינון שתרוץ אז.
+          </span>
+        </p>
+
+        <div className="space-y-3">
+          {alerts.map((a) => (
+            <AlertCard
+              key={a.id}
+              alert={a}
+              highlight={a.id === justSaved}
+              onToggle={() =>
+                setAlerts((prev) =>
+                  prev.map((x) => (x.id === a.id ? { ...x, isActive: !x.isActive } : x)),
+                )
+              }
+              onRemove={() => setAlerts((prev) => prev.filter((x) => x.id !== a.id))}
+            />
+          ))}
+          {alerts.length === 0 && (
+            <EmptyState title="עוד לא יצרת התראות">
+              בנה התראה בטופס שלמטה ותקבל עדכון על כל מכרז חדש שעונה על הסינון שלך.
+            </EmptyState>
+          )}
+        </div>
+      </section>
+
+      {/* Query builder */}
+      <section className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow)]">
+        <h2 className="mb-4 text-lg font-bold text-primary">יצירת התראה חדשה</h2>
+
+        <div className="mb-4">
+          <Field label="שם ההתראה">
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder='למשל: מגרשים למגורים בשרון עד 3M'
+              className="input w-full"
+            />
+          </Field>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="עיר">
+            <select value={city} onChange={(e) => setCity(e.target.value)} className="input w-full">
+              <option value="">כל הערים</option>
+              {cities.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label={`תקציב מקסימלי: ${formatILSCompact(maxPrice)}`}>
+            <input
+              type="range"
+              min={500_000}
+              max={60_000_000}
+              step={250_000}
+              value={maxPrice}
+              onChange={(e) => setMaxPrice(Number(e.target.value))}
+              className="mt-3 w-full accent-[var(--accent)]"
+            />
+          </Field>
+
+          <Field label={`פער משומה מינ׳: ${minDiscount}%`}>
+            <input
+              type="range"
+              min={0}
+              max={60}
+              step={1}
+              value={minDiscount}
+              onChange={(e) => setMinDiscount(Number(e.target.value))}
+              className="mt-3 w-full accent-[var(--accent)]"
+            />
+          </Field>
+
+          <Field label={`ציון עסקה מינ׳: ${minScore}`}>
+            <input
+              type="range"
+              min={0}
+              max={99}
+              step={1}
+              value={minScore}
+              onChange={(e) => setMinScore(Number(e.target.value))}
+              className="mt-3 w-full accent-[var(--accent)]"
+            />
+          </Field>
+        </div>
+
+        <div className="mt-4">
+          <span className="mb-2 block text-[11px] font-medium text-faint">סוג עסקה</span>
+          <div className="flex flex-wrap gap-2">
+            {DEAL_TYPES.map((t) => (
+              <Chip key={t} active={types.includes(t)} onClick={() => toggle(types, t, setTypes)}>
+                {DEAL_TYPE_LABEL[t]}
+              </Chip>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <span className="mb-2 block text-[11px] font-medium text-faint">ערוצי התראה</span>
+          <div className="flex flex-wrap gap-2">
+            {CHANNELS.map(({ key, label, icon: Icon }) => (
+              <Chip
+                key={key}
+                active={channels.includes(key)}
+                onClick={() => toggle(channels, key, setChannels)}
+              >
+                <Icon size={14} /> {label}
+              </Chip>
+            ))}
+          </div>
+          {channels.length === 0 && (
+            <p className="mt-2 text-[11px] text-negative">בחר לפחות ערוץ אחד.</p>
+          )}
+          {(missingEmail || missingPhone) && (
+            <p className="mt-2 flex items-center gap-1.5 text-[11px] text-warning">
+              <Info size={13} />
+              {missingEmail && missingPhone
+                ? "חסרים אימייל וטלפון בפרטי החשבון."
+                : missingEmail
+                  ? "חסר אימייל בפרטי החשבון."
+                  : "חסר מספר טלפון ל-WhatsApp בפרטי החשבון."}
+            </p>
+          )}
+        </div>
+
+        <div className="mt-4">
+          <span className="mb-2 block text-[11px] font-medium text-faint">תדירות</span>
+          <div className="flex flex-wrap gap-2">
+            {FREQ.map((f) => (
+              <Chip key={f.key} active={frequency === f.key} onClick={() => setFrequency(f.key)}>
+                {f.label}
+              </Chip>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-5 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setName("")}
+            className="rounded-lg px-4 py-2 text-sm font-medium text-muted transition hover:text-primary"
+          >
+            ניקוי
+          </button>
+          <button
+            type="button"
+            onClick={saveAlert}
+            disabled={channels.length === 0}
+            className="btn-primary inline-flex items-center gap-1.5 rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus size={15} /> שמירת התראה
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function AlertCard({
+  alert,
+  highlight,
+  onToggle,
+  onRemove,
+}: {
+  alert: Alert;
+  highlight: boolean;
+  onToggle: () => void;
+  onRemove: () => void;
+}) {
+  const f = alert.filters;
+  const summary: string[] = [];
+  if (f.cities?.length) summary.push(f.cities.join(", "));
+  if (f.maxPrice) summary.push(`עד ${formatILSCompact(f.maxPrice)}`);
+  if (f.minDiscountPct) summary.push(`פער משומה ${f.minDiscountPct}%+`);
+  if (f.minScore) summary.push(`ציון ${f.minScore}+`);
+  if (f.dealTypes?.length) summary.push(f.dealTypes.map((t) => DEAL_TYPE_LABEL[t]).join(" · "));
+
+  return (
+    <div
+      className={`rounded-xl border bg-surface p-4 shadow-[var(--shadow)] transition ${
+        highlight ? "border-accent" : "border-border"
+      } ${alert.isActive ? "" : "opacity-70"}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-bold text-primary">{alert.name}</h3>
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                alert.isActive ? "bg-positive-soft text-positive" : "bg-surface-2 text-muted"
+              }`}
+            >
+              ● {alert.isActive ? "פעילה" : "מושהית"}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-muted">{summary.join(" · ") || "כל המכרזים"}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-faint">
+            {alert.channels.map((c) => {
+              const ch = CHANNELS.find((x) => x.key === c);
+              if (!ch) return null;
+              const Icon = ch.icon;
+              return (
+                <span
+                  key={c}
+                  className="inline-flex items-center gap-1 rounded bg-surface-2 px-1.5 py-0.5 text-muted"
+                >
+                  <Icon size={12} /> {ch.label}
+                </span>
+              );
+            })}
+            <span>· {FREQ.find((f) => f.key === alert.frequency)?.label}</span>
+          </div>
+        </div>
+        <div className="flex shrink-0 gap-1">
+          <IconBtn onClick={onToggle} title={alert.isActive ? "השהיית ההתראה" : "הפעלת ההתראה"}>
+            {alert.isActive ? <Pause size={14} /> : <Play size={14} />}
+          </IconBtn>
+          <IconBtn onClick={onRemove} title="מחיקת ההתראה" tone="danger">
+            <Trash2 size={14} />
+          </IconBtn>
+        </div>
+      </div>
+    </div>
+  );
+}

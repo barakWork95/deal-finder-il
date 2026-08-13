@@ -13,6 +13,7 @@ import {
   formatLandArea,
 } from "@/lib/format";
 import { DealBadge, DealTypeChip, ScoreChip, DiscountTag } from "@/components/ui";
+import { SaveDealButton } from "@/components/SaveDealButton";
 
 type SortKey = "score" | "discount" | "price_asc" | "deadline" | "expected_gap" | "premium";
 type ViewMode = "table" | "cards" | "map";
@@ -343,12 +344,15 @@ function DealTable({ deals }: { deals: Deal[] }) {
                 </div>
               </td>
               <td className="px-3 py-3 text-start">
-                <Link
-                  href={`/deal/${d.id}`}
-                  className="rounded-md border border-border bg-surface-2 px-3 py-1.5 text-xs font-semibold text-primary opacity-0 transition hover:border-accent group-hover:opacity-100"
-                >
-                  פרטים
-                </Link>
+                <div className="flex items-center gap-1.5">
+                  <SaveDealButton dealId={d.id} />
+                  <Link
+                    href={`/deal/${d.id}`}
+                    className="rounded-md border border-border bg-surface-2 px-3 py-1.5 text-xs font-semibold text-primary opacity-0 transition hover:border-accent group-hover:opacity-100"
+                  >
+                    פרטים
+                  </Link>
+                </div>
               </td>
             </tr>
           ))}
@@ -374,7 +378,10 @@ function DealCards({ deals }: { deals: Deal[] }) {
               </h3>
               <p className="text-xs text-muted">{d.propertyType}</p>
             </div>
-            <ScoreChip score={d.dealScore} />
+            <div className="flex shrink-0 items-center gap-2">
+              <SaveDealButton dealId={d.id} />
+              <ScoreChip score={d.dealScore} />
+            </div>
           </div>
           <div className="mb-3 flex items-baseline justify-between">
             <span className="num text-2xl font-extrabold text-primary" dir="ltr">
