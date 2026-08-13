@@ -1,11 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { Mail, MessageCircle, Pause, Play, Trash2, Info, Plus, type LucideIcon } from "lucide-react";
+import Link from "next/link";
+import {
+  Mail,
+  MessageCircle,
+  Pause,
+  Play,
+  Trash2,
+  Info,
+  Plus,
+  SlidersHorizontal,
+  type LucideIcon,
+} from "lucide-react";
 import type { Alert, AlertChannel, AlertFrequency, DealType } from "@/lib/types";
 import { DEAL_TYPE_LABEL, formatILSCompact } from "@/lib/format";
 import { ALERTS_KEY, useProfile, useStoredState } from "@/lib/client-store";
 import { Chip, EmptyState, Field, IconBtn } from "@/components/personal/controls";
+import { hasPrefill, type AlertPrefill } from "@/lib/alert-prefill";
 
 export const CHANNELS: { key: AlertChannel; label: string; icon: LucideIcon }[] = [
   { key: "whatsapp", label: "WhatsApp", icon: MessageCircle },
@@ -22,20 +34,52 @@ const DEAL_TYPES: DealType[] = ["rami_tender", "foreclosure", "price_drop", "inh
 
 const NO_ALERTS: Alert[] = [];
 
-export function AlertsPanel({ cities }: { cities: string[] }) {
+const PRICE_MAX = 60_000_000;
+
+/**
+ * Arriving from "שמירת סינון כהתראה" makes the feed's filters authoritative:
+ * anything the feed was NOT filtering on starts unset here, rather than
+ * inheriting a friendly default that would quietly narrow the alert further
+ * than what the user was looking at.
+ */
+function initialForm(prefill: AlertPrefill) {
+  const carried = hasPrefill(prefill);
+  return {
+    city: prefill.city ?? "",
+    maxPrice: prefill.maxPrice ?? (carried ? PRICE_MAX : 3_000_000),
+    minDiscount: prefill.minDiscount ?? (carried ? 0 : 15),
+    minScore: prefill.minScore ?? (carried ? 0 : 80),
+    types: prefill.types ?? (carried ? [] : (["rami_tender"] as DealType[])),
+  };
+}
+
+export function AlertsPanel({ cities, prefill = {} }: { cities: string[]; prefill?: AlertPrefill }) {
   const [alerts, setAlerts] = useStoredState<Alert[]>(ALERTS_KEY, NO_ALERTS);
   const [profile] = useProfile();
   const [justSaved, setJustSaved] = useState<string | null>(null);
 
   // Query builder
+  const start = initialForm(prefill);
+  const [carriedFilters, setCarriedFilters] = useState(hasPrefill(prefill));
   const [name, setName] = useState("");
-  const [city, setCity] = useState("");
-  const [maxPrice, setMaxPrice] = useState(3_000_000);
-  const [minDiscount, setMinDiscount] = useState(15);
-  const [minScore, setMinScore] = useState(80);
-  const [types, setTypes] = useState<DealType[]>(["rami_tender"]);
+  const [city, setCity] = useState(start.city);
+  const [maxPrice, setMaxPrice] = useState(start.maxPrice);
+  const [minDiscount, setMinDiscount] = useState(start.minDiscount);
+  const [minScore, setMinScore] = useState(start.minScore);
+  const [types, setTypes] = useState<DealType[]>(start.types);
   const [channels, setChannels] = useState<AlertChannel[]>(["email"]);
   const [frequency, setFrequency] = useState<AlertFrequency>("instant");
+
+  function resetForm() {
+    const d = initialForm({});
+    setName("");
+    setCity(d.city);
+    setMaxPrice(d.maxPrice);
+    setMinDiscount(d.minDiscount);
+    setMinScore(d.minScore);
+    setTypes(d.types);
+    setCarriedFilters(false);
+  }
 
   function toggle<T>(list: T[], item: T, setter: (v: T[]) => void) {
     setter(list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
@@ -115,6 +159,16 @@ export function AlertsPanel({ cities }: { cities: string[] }) {
       <section className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow)]">
         <h2 className="mb-4 text-lg font-bold text-primary">יצירת התראה חדשה</h2>
 
+        {carriedFilters && (
+          <p className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-accent/30 bg-accent-soft p-3 text-[11px] text-muted">
+            <SlidersHorizontal size={13} className="shrink-0 text-accent" />
+            <span>הסינון מהפיד הועתק לטופס. אפשר לשנות כל שדה לפני השמירה.</span>
+            <Link href="/" className="font-semibold text-accent hover:underline">
+              חזרה לפיד
+            </Link>
+          </p>
+        )}
+
         <div className="mb-4">
           <Field label="שם ההתראה">
             <input
@@ -142,7 +196,7 @@ export function AlertsPanel({ cities }: { cities: string[] }) {
             <input
               type="range"
               min={500_000}
-              max={60_000_000}
+              max={PRICE_MAX}
               step={250_000}
               value={maxPrice}
               onChange={(e) => setMaxPrice(Number(e.target.value))}
@@ -228,7 +282,7 @@ export function AlertsPanel({ cities }: { cities: string[] }) {
         <div className="mt-5 flex items-center justify-end gap-2">
           <button
             type="button"
-            onClick={() => setName("")}
+            onClick={resetForm}
             className="rounded-lg px-4 py-2 text-sm font-medium text-muted transition hover:text-primary"
           >
             ניקוי

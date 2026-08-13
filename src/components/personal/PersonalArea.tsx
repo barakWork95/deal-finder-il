@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Bell, Bookmark, CreditCard, User, type LucideIcon } from "lucide-react";
 import type { Deal } from "@/lib/types";
+import type { AlertPrefill, PersonalTab } from "@/lib/alert-prefill";
 import { ALERTS_KEY, useSavedDealIds, useStoredState } from "@/lib/client-store";
 import type { Alert } from "@/lib/types";
 import { AlertsPanel } from "@/components/personal/AlertsPanel";
@@ -10,7 +11,7 @@ import { SavedDealsPanel } from "@/components/personal/SavedDealsPanel";
 import { AccountPanel } from "@/components/personal/AccountPanel";
 import { BillingPanel } from "@/components/personal/BillingPanel";
 
-type TabKey = "alerts" | "saved" | "account" | "billing";
+type TabKey = PersonalTab;
 
 const TABS: { key: TabKey; label: string; icon: LucideIcon }[] = [
   { key: "alerts", label: "ההתראות שלי", icon: Bell },
@@ -21,8 +22,33 @@ const TABS: { key: TabKey; label: string; icon: LucideIcon }[] = [
 
 const NO_ALERTS: Alert[] = [];
 
-export function PersonalArea({ deals, cities }: { deals: Deal[]; cities: string[] }) {
-  const [tab, setTab] = useState<TabKey>("alerts");
+export function PersonalArea({
+  deals,
+  cities,
+  initialTab = "alerts",
+  prefill = {},
+}: {
+  deals: Deal[];
+  cities: string[];
+  initialTab?: TabKey;
+  prefill?: AlertPrefill;
+}) {
+  const [tab, setTab] = useState<TabKey>(initialTab);
+
+  /**
+   * Keep the URL in step so the current tab can be shared or reloaded. This
+   * uses the History API directly (which Next syncs with its router) rather
+   * than router.replace: the page is force-dynamic, so a router navigation
+   * would re-run the tender queries on every tab click. replaceState also
+   * leaves the back button pointing at wherever the user came from instead of
+   * walking back through each tab they opened.
+   */
+  function selectTab(next: TabKey) {
+    setTab(next);
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", next);
+    window.history.replaceState(null, "", `${window.location.pathname}?${params}`);
+  }
   const [alerts] = useStoredState<Alert[]>(ALERTS_KEY, NO_ALERTS);
   const [savedIds] = useSavedDealIds();
 
@@ -53,7 +79,7 @@ export function PersonalArea({ deals, cities }: { deals: Deal[]; cities: string[
                   key={key}
                   type="button"
                   aria-current={active ? "page" : undefined}
-                  onClick={() => setTab(key)}
+                  onClick={() => selectTab(key)}
                   className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-start text-sm font-medium transition lg:w-full ${
                     active
                       ? "bg-accent-soft text-accent"
@@ -83,7 +109,7 @@ export function PersonalArea({ deals, cities }: { deals: Deal[]; cities: string[
             </div>
             <button
               type="button"
-              onClick={() => setTab("billing")}
+              onClick={() => selectTab("billing")}
               className="mt-2 font-semibold text-accent hover:underline"
             >
               השוואת מסלולים
@@ -93,7 +119,7 @@ export function PersonalArea({ deals, cities }: { deals: Deal[]; cities: string[
 
         {/* `key` restarts the entrance animation on every tab switch. */}
         <div key={tab} className="panel-in min-w-0">
-          {tab === "alerts" && <AlertsPanel cities={cities} />}
+          {tab === "alerts" && <AlertsPanel cities={cities} prefill={prefill} />}
           {tab === "saved" && <SavedDealsPanel deals={deals} />}
           {tab === "account" && <AccountPanel />}
           {tab === "billing" && <BillingPanel />}

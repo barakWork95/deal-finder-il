@@ -14,6 +14,7 @@ import {
 } from "@/lib/format";
 import { DealBadge, DealTypeChip, ScoreChip, DiscountTag } from "@/components/ui";
 import { SaveDealButton } from "@/components/SaveDealButton";
+import { buildAlertHref } from "@/lib/alert-prefill";
 
 type SortKey = "score" | "discount" | "price_asc" | "deadline" | "expected_gap" | "premium";
 type ViewMode = "table" | "cards" | "map";
@@ -30,6 +31,8 @@ const DealMap = dynamic(() => import("@/components/DealMap"), {
 
 const DEAL_TYPES: DealType[] = ["foreclosure", "rami_tender", "price_drop", "inheritance"];
 const DISCOUNT_PRESETS = [0, 10, 15, 20];
+// Mirrors the Deal Score tiers used everywhere else (80+ green, 60–79 amber).
+const SCORE_PRESETS = [0, 60, 80, 90];
 const PRICE_MAX = 60_000_000; // real RMI land tenders reach tens of millions
 
 /** True on phone-width screens; cards replace the wide table there. */
@@ -49,6 +52,7 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
   const [city, setCity] = useState<string>("");
   const [maxPrice, setMaxPrice] = useState<number>(PRICE_MAX);
   const [minDiscount, setMinDiscount] = useState<number>(0);
+  const [minScore, setMinScore] = useState<number>(0);
   const [types, setTypes] = useState<DealType[]>([]);
   // "Realistic" = expected winning price still below the official appraisal.
   const [onlyRealistic, setOnlyRealistic] = useState(false);
@@ -66,6 +70,7 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
     setCity("");
     setMaxPrice(PRICE_MAX);
     setMinDiscount(0);
+    setMinScore(0);
     setTypes([]);
     setOnlyRealistic(false);
   }
@@ -76,6 +81,7 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
       if (city && d.city !== city) return false;
       if (d.askingPrice > maxPrice) return false;
       if (d.discountPct < minDiscount) return false;
+      if (d.dealScore < minScore) return false;
       if (types.length && !types.includes(d.dealType)) return false;
       if (onlyRealistic && !((d.expectedGapPct ?? -1) > 0)) return false;
       return true;
@@ -101,12 +107,13 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
       }
     });
     return result;
-  }, [deals, city, maxPrice, minDiscount, types, sort, onlyRealistic]);
+  }, [deals, city, maxPrice, minDiscount, minScore, types, sort, onlyRealistic]);
 
   const activeFilterCount =
     (city ? 1 : 0) +
     (maxPrice < PRICE_MAX ? 1 : 0) +
     (minDiscount > 0 ? 1 : 0) +
+    (minScore > 0 ? 1 : 0) +
     types.length +
     (onlyRealistic ? 1 : 0);
 
@@ -156,6 +163,24 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
             </div>
           </FilterField>
 
+          <FilterField label="ציון עסקה מינ׳">
+            <div className="flex gap-1">
+              {SCORE_PRESETS.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setMinScore(p)}
+                  className={`num rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
+                    minScore === p
+                      ? "border-accent bg-accent-soft text-accent"
+                      : "border-border bg-surface-2 text-muted hover:text-primary"
+                  }`}
+                >
+                  {p === 0 ? "הכל" : `${p}+`}
+                </button>
+              ))}
+            </div>
+          </FilterField>
+
           <FilterField label="סוג עסקה">
             <div className="flex flex-wrap gap-1">
               {DEAL_TYPES.map((t) => (
@@ -198,7 +223,15 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
               </button>
             )}
             <Link
-              href="/alerts"
+              href={buildAlertHref({
+                city: city || undefined,
+                // Only a budget that actually narrows the feed is worth carrying.
+                maxPrice: maxPrice < PRICE_MAX ? maxPrice : undefined,
+                minDiscount,
+                minScore,
+                types,
+              })}
+              title="פתיחת טופס התראה עם הסינון הנוכחי"
               className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs font-semibold text-primary transition hover:border-border-strong"
             >
               <BellPlus size={14} /> שמירת סינון כהתראה
