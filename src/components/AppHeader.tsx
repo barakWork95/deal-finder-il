@@ -19,8 +19,11 @@ export function AppHeader() {
     <header className="sticky top-0 z-30 border-b border-border bg-bg/85 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-4 px-4">
         {/* Logo (start = right in RTL) */}
+        {/* Full wordmark where there's room; just the flame on phone widths,
+            so the search field keeps a usable share of the bar. */}
         <Link href="/" className="flex shrink-0 items-center" aria-label="קרקעHOT — לדף הבית">
-          <BrandMark className="text-lg sm:text-xl" />
+          <BrandMark variant="flame" className="text-xl sm:hidden" />
+          <BrandMark className="hidden text-xl sm:block" />
         </Link>
 
         {/* Global search */}
