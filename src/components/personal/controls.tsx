@@ -1,5 +1,7 @@
 "use client";
 
+import type { LucideIcon } from "lucide-react";
+
 /** Small shared controls for the personal-area panels. */
 
 export function Chip({
@@ -70,6 +72,34 @@ export function Field({
       {children}
       {hint && <span className="mt-1 block text-[11px] text-faint">{hint}</span>}
     </label>
+  );
+}
+
+/**
+ * Input with an icon inside it.
+ *
+ * The icon and the padding are BOTH placed physically (left), on purpose. The
+ * page is RTL, so an icon at the inline-end sits on the left — but a field
+ * carrying `dir="ltr"` (email, phone) resolves `pe-*` against its own
+ * direction and pads the *right* instead, leaving the text to run straight
+ * under the icon. Physical placement keeps the two on the same side whatever
+ * direction the field itself uses. The padding comes from `.input-icon` in
+ * globals.css, since unlayered `.input` outranks a Tailwind padding utility.
+ */
+export function IconInput({
+  icon: Icon,
+  className = "",
+  ...props
+}: React.InputHTMLAttributes<HTMLInputElement> & { icon: LucideIcon }) {
+  return (
+    <div className="relative">
+      <Icon
+        size={14}
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-3 my-auto text-faint"
+      />
+      <input {...props} className={`input input-icon w-full ${className}`} />
+    </div>
   );
 }
 

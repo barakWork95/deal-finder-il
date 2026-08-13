@@ -15,6 +15,7 @@ import { WinningPremium } from "@/components/WinningPremium";
 import { CmaChart } from "@/components/CmaChart";
 import DealLocationMap from "@/components/DealLocationMap";
 import { SaveDealButton } from "@/components/SaveDealButton";
+import { buildAlertHref, scoreThresholdFor } from "@/lib/alert-prefill";
 
 export default async function DealDetailPage({ params }: PageProps<"/deal/[id]">) {
   const { id } = await params;
@@ -38,7 +39,19 @@ export default async function DealDetailPage({ params }: PageProps<"/deal/[id]">
         </Link>
         <div className="flex flex-wrap gap-2">
           <SaveDealButton dealId={deal.id} variant="labelled" />
-          <ActionBtn icon={Bell}>התראה דומה</ActionBtn>
+          {/* Same city + zoning, and a score floor one tier below this
+              tender's, so the alert catches comparable plots rather than only
+              an exact repeat of this one. */}
+          <Link
+            href={buildAlertHref({
+              city: deal.city,
+              zonings: [deal.zoning],
+              minScore: scoreThresholdFor(deal.dealScore),
+            })}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-primary transition hover:border-border-strong"
+          >
+            <Bell size={14} /> התראה דומה
+          </Link>
           <ActionBtn icon={Share2}>שיתוף</ActionBtn>
         </div>
       </div>

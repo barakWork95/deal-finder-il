@@ -195,6 +195,13 @@ select.input {
   cursor: pointer;
 }
 
+/* Room for an icon sitting inside a field. Declared here rather than as a
+   Tailwind padding utility because `.input` is unlayered CSS and would
+   otherwise win over the utility's layer no matter what the markup says. */
+.input-icon {
+  padding-left: 2.25rem;
+}
+
 /* Thin custom scrollbar for the terminal feel */
 ::-webkit-scrollbar {
   width: 10px;

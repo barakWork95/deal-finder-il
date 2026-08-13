@@ -1,4 +1,4 @@
-import type { DealType } from "./types";
+import type { DealType, Zoning } from "./types";
 
 /**
  * Carries the feed's active filters into the alert builder through the URL, so
@@ -13,6 +13,7 @@ export type AlertPrefill = {
   minDiscount?: number;
   minScore?: number;
   types?: DealType[];
+  zonings?: Zoning[];
 };
 
 const DEAL_TYPES: DealType[] = [
@@ -23,6 +24,28 @@ const DEAL_TYPES: DealType[] = [
   "price_drop",
   "other",
 ];
+
+export const ZONINGS: Zoning[] = [
+  "מגורים",
+  "מסחר",
+  "תעשייה ומלאכה",
+  "חקלאי",
+  "מעורב",
+  "תיירות",
+  "מבני ציבור",
+];
+
+/**
+ * Score threshold for an alert built from one tender. The tender's own score
+ * would be far too tight a filter (a 97 would match almost nothing), so it
+ * drops to the tier below it — the same 60/80/90 tiers the feed filters by.
+ */
+export function scoreThresholdFor(score: number): number {
+  if (score >= 90) return 90;
+  if (score >= 80) return 80;
+  if (score >= 60) return 60;
+  return 0;
+}
 
 export type PersonalTab = "alerts" | "saved" | "account" | "billing";
 const TABS: PersonalTab[] = ["alerts", "saved", "account", "billing"];
@@ -39,6 +62,7 @@ export function buildAlertHref(prefill: AlertPrefill): string {
   if (prefill.minDiscount) params.set("minDiscount", String(Math.round(prefill.minDiscount)));
   if (prefill.minScore) params.set("minScore", String(Math.round(prefill.minScore)));
   if (prefill.types?.length) params.set("types", prefill.types.join(","));
+  if (prefill.zonings?.length) params.set("zonings", prefill.zonings.join(","));
   return `/alerts?${params}`;
 }
 
@@ -60,15 +84,22 @@ export function parseAlertPrefill(params: RawParams): AlertPrefill {
     ?.split(",")
     .filter((t): t is DealType => DEAL_TYPES.includes(t as DealType));
 
+  const zonings = first(params.zonings)
+    ?.split(",")
+    .filter((z): z is Zoning => ZONINGS.includes(z as Zoning));
+
   return {
     city: first(params.city) || undefined,
     maxPrice: num(params.maxPrice, 500_000, 60_000_000),
     minDiscount: num(params.minDiscount, 0, 60),
     minScore: num(params.minScore, 0, 99),
     types: types?.length ? types : undefined,
+    zonings: zonings?.length ? zonings : undefined,
   };
 }
 
 export function hasPrefill(p: AlertPrefill): boolean {
-  return Boolean(p.city || p.maxPrice != null || p.minDiscount || p.minScore || p.types?.length);
+  return Boolean(
+    p.city || p.maxPrice != null || p.minDiscount || p.minScore || p.types?.length || p.zonings?.length,
+  );
 }

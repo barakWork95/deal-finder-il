@@ -138,6 +138,7 @@ export interface Alert {
     minPrice?: number;
     minDiscountPct?: number;
     dealTypes?: DealType[];
+    zonings?: Zoning[];
     minScore?: number;
   };
   channels: AlertChannel[];

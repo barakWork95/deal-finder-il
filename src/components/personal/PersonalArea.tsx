@@ -119,7 +119,7 @@ export function PersonalArea({
 
         {/* `key` restarts the entrance animation on every tab switch. */}
         <div key={tab} className="panel-in min-w-0">
-          {tab === "alerts" && <AlertsPanel cities={cities} prefill={prefill} />}
+          {tab === "alerts" && <AlertsPanel deals={deals} cities={cities} prefill={prefill} />}
           {tab === "saved" && <SavedDealsPanel deals={deals} />}
           {tab === "account" && <AccountPanel />}
           {tab === "billing" && <BillingPanel />}

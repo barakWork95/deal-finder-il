@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Check, Mail, MessageCircle, Trash2, User } from "lucide-react";
 import { clearLocalData, useProfile } from "@/lib/client-store";
-import { Field } from "@/components/personal/controls";
+import { Field, IconInput } from "@/components/personal/controls";
 
 /** Israeli mobile, with or without the leading zero / +972. */
 const PHONE_RE = /^(\+?972|0)?5\d{8}$/;
@@ -44,62 +44,46 @@ export function AccountPanel() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <Field label="שם מלא">
-              <div className="relative">
-                <User
-                  size={14}
-                  className="pointer-events-none absolute inset-y-0 my-auto end-3 text-faint"
-                />
-                <input
-                  value={draft.fullName}
-                  onChange={(e) => {
-                    setDraft({ ...draft, fullName: e.target.value });
-                    setSaved(false);
-                  }}
-                  placeholder="ישראל ישראלי"
-                  className="input w-full pe-9"
-                />
-              </div>
+              <IconInput
+                icon={User}
+                value={draft.fullName}
+                onChange={(e) => {
+                  setDraft({ ...draft, fullName: e.target.value });
+                  setSaved(false);
+                }}
+                placeholder="ישראל ישראלי"
+              />
             </Field>
           </div>
 
           <Field label="אימייל" hint="יעד להתראות אימייל ולסיכומים">
-            <div className="relative">
-              <Mail
-                size={14}
-                className="pointer-events-none absolute inset-y-0 my-auto end-3 text-faint"
-              />
-              <input
-                type="email"
-                dir="ltr"
-                value={draft.email}
-                onChange={(e) => {
-                  setDraft({ ...draft, email: e.target.value });
-                  setSaved(false);
-                }}
-                placeholder="you@example.com"
-                className={`input w-full pe-9 text-start ${emailError ? "border-negative" : ""}`}
-              />
-            </div>
+            <IconInput
+              icon={Mail}
+              type="email"
+              dir="ltr"
+              value={draft.email}
+              onChange={(e) => {
+                setDraft({ ...draft, email: e.target.value });
+                setSaved(false);
+              }}
+              placeholder="you@example.com"
+              className={emailError ? "border-negative" : ""}
+            />
           </Field>
 
           <Field label="טלפון נייד" hint="יעד להתראות WhatsApp">
-            <div className="relative">
-              <MessageCircle
-                size={14}
-                className="pointer-events-none absolute inset-y-0 my-auto end-3 text-faint"
-              />
-              <input
-                type="tel"
-                dir="ltr"
-                value={draft.phone}
-                onChange={(e) => {
-                  setDraft({ ...draft, phone: e.target.value });
-                  setSaved(false);
-                }}
-                placeholder="050-1234567"
-                className={`input w-full pe-9 text-start ${phoneError ? "border-negative" : ""}`}
-              />
-            </div>
+            <IconInput
+              icon={MessageCircle}
+              type="tel"
+              dir="ltr"
+              value={draft.phone}
+              onChange={(e) => {
+                setDraft({ ...draft, phone: e.target.value });
+                setSaved(false);
+              }}
+              placeholder="050-1234567"
+              className={phoneError ? "border-negative" : ""}
+            />
           </Field>
         </div>
 

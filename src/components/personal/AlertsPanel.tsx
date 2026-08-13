@@ -11,13 +11,15 @@ import {
   Info,
   Plus,
   SlidersHorizontal,
+  Radar,
   type LucideIcon,
 } from "lucide-react";
-import type { Alert, AlertChannel, AlertFrequency, DealType } from "@/lib/types";
+import type { Alert, AlertChannel, AlertFrequency, Deal, DealType, Zoning } from "@/lib/types";
 import { DEAL_TYPE_LABEL, formatILSCompact } from "@/lib/format";
 import { ALERTS_KEY, useProfile, useStoredState } from "@/lib/client-store";
 import { Chip, EmptyState, Field, IconBtn } from "@/components/personal/controls";
-import { hasPrefill, type AlertPrefill } from "@/lib/alert-prefill";
+import { ZONINGS, hasPrefill, type AlertPrefill } from "@/lib/alert-prefill";
+import { countMatches } from "@/lib/alert-match";
 
 export const CHANNELS: { key: AlertChannel; label: string; icon: LucideIcon }[] = [
   { key: "whatsapp", label: "WhatsApp", icon: MessageCircle },
@@ -50,10 +52,19 @@ function initialForm(prefill: AlertPrefill) {
     minDiscount: prefill.minDiscount ?? (carried ? 0 : 15),
     minScore: prefill.minScore ?? (carried ? 0 : 80),
     types: prefill.types ?? (carried ? [] : (["rami_tender"] as DealType[])),
+    zonings: prefill.zonings ?? [],
   };
 }
 
-export function AlertsPanel({ cities, prefill = {} }: { cities: string[]; prefill?: AlertPrefill }) {
+export function AlertsPanel({
+  deals,
+  cities,
+  prefill = {},
+}: {
+  deals: Deal[];
+  cities: string[];
+  prefill?: AlertPrefill;
+}) {
   const [alerts, setAlerts] = useStoredState<Alert[]>(ALERTS_KEY, NO_ALERTS);
   const [profile] = useProfile();
   const [justSaved, setJustSaved] = useState<string | null>(null);
@@ -67,6 +78,7 @@ export function AlertsPanel({ cities, prefill = {} }: { cities: string[]; prefil
   const [minDiscount, setMinDiscount] = useState(start.minDiscount);
   const [minScore, setMinScore] = useState(start.minScore);
   const [types, setTypes] = useState<DealType[]>(start.types);
+  const [zonings, setZonings] = useState<Zoning[]>(start.zonings);
   const [channels, setChannels] = useState<AlertChannel[]>(["email"]);
   const [frequency, setFrequency] = useState<AlertFrequency>("instant");
 
@@ -78,6 +90,7 @@ export function AlertsPanel({ cities, prefill = {} }: { cities: string[]; prefil
     setMinDiscount(d.minDiscount);
     setMinScore(d.minScore);
     setTypes(d.types);
+    setZonings(d.zonings);
     setCarriedFilters(false);
   }
 
@@ -96,6 +109,7 @@ export function AlertsPanel({ cities, prefill = {} }: { cities: string[]; prefil
         minDiscountPct: minDiscount || undefined,
         minScore: minScore || undefined,
         dealTypes: types.length ? types : undefined,
+        zonings: zonings.length ? zonings : undefined,
       },
       channels,
       frequency,
@@ -106,6 +120,25 @@ export function AlertsPanel({ cities, prefill = {} }: { cities: string[]; prefil
     setName("");
     setJustSaved(alert.id);
   }
+
+  // What the alert being built would catch right now, so the filters can be
+  // judged before saving them.
+  const draftMatches = countMatches(deals, {
+    id: "draft",
+    name: "",
+    filters: {
+      cities: city ? [city] : undefined,
+      maxPrice,
+      minDiscountPct: minDiscount || undefined,
+      minScore: minScore || undefined,
+      dealTypes: types.length ? types : undefined,
+      zonings: zonings.length ? zonings : undefined,
+    },
+    channels,
+    frequency,
+    isActive: true,
+    triggeredThisMonth: 0,
+  });
 
   // A channel with nowhere to send to is worth flagging before it silently
   // does nothing.
@@ -138,6 +171,7 @@ export function AlertsPanel({ cities, prefill = {} }: { cities: string[]; prefil
             <AlertCard
               key={a.id}
               alert={a}
+              matches={countMatches(deals, a)}
               highlight={a.id === justSaved}
               onToggle={() =>
                 setAlerts((prev) =>
@@ -241,6 +275,19 @@ export function AlertsPanel({ cities, prefill = {} }: { cities: string[]; prefil
         </div>
 
         <div className="mt-4">
+          <span className="mb-2 block text-[11px] font-medium text-faint">
+            ייעוד תכנוני <span className="text-faint">(ריק = כל הייעודים)</span>
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {ZONINGS.map((z) => (
+              <Chip key={z} active={zonings.includes(z)} onClick={() => toggle(zonings, z, setZonings)}>
+                {z}
+              </Chip>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4">
           <span className="mb-2 block text-[11px] font-medium text-faint">ערוצי התראה</span>
           <div className="flex flex-wrap gap-2">
             {CHANNELS.map(({ key, label, icon: Icon }) => (
@@ -279,7 +326,13 @@ export function AlertsPanel({ cities, prefill = {} }: { cities: string[]; prefil
           </div>
         </div>
 
-        <div className="mt-5 flex items-center justify-end gap-2">
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          <span className="flex items-center gap-1.5 text-xs text-muted">
+            <Radar size={14} className="text-accent" />
+            הסינון הנוכחי תואם{" "}
+            <span className="num font-bold text-primary">{draftMatches}</span> מכרזים פעילים
+          </span>
+          <span className="ms-auto" />
           <button
             type="button"
             onClick={resetForm}
@@ -303,11 +356,13 @@ export function AlertsPanel({ cities, prefill = {} }: { cities: string[]; prefil
 
 function AlertCard({
   alert,
+  matches,
   highlight,
   onToggle,
   onRemove,
 }: {
   alert: Alert;
+  matches: number;
   highlight: boolean;
   onToggle: () => void;
   onRemove: () => void;
@@ -319,6 +374,7 @@ function AlertCard({
   if (f.minDiscountPct) summary.push(`פער משומה ${f.minDiscountPct}%+`);
   if (f.minScore) summary.push(`ציון ${f.minScore}+`);
   if (f.dealTypes?.length) summary.push(f.dealTypes.map((t) => DEAL_TYPE_LABEL[t]).join(" · "));
+  if (f.zonings?.length) summary.push(`ייעוד: ${f.zonings.join(", ")}`);
 
   return (
     <div
@@ -355,6 +411,21 @@ function AlertCard({
             })}
             <span>· {FREQ.find((f) => f.key === alert.frequency)?.label}</span>
           </div>
+          <p
+            className={`mt-2 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold ${
+              matches > 0 ? "bg-accent-soft text-accent" : "bg-surface-2 text-faint"
+            }`}
+            title="נבדק מול המכרזים הפעילים כרגע"
+          >
+            <Radar size={12} />
+            {matches > 0 ? (
+              <>
+                נמצאו <span className="num">{matches}</span> מכרזים תואמים
+              </>
+            ) : (
+              "אין כרגע מכרזים תואמים"
+            )}
+          </p>
         </div>
         <div className="flex shrink-0 gap-1">
           <IconBtn onClick={onToggle} title={alert.isActive ? "השהיית ההתראה" : "הפעלת ההתראה"}>
