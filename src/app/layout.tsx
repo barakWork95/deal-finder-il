@@ -20,10 +20,25 @@ const jetbrains = JetBrains_Mono({
   display: "swap",
 });
 
+const DESCRIPTION =
+  'כל עסקאות הקרקע והמגרשים בישראל במקום אחד — מכרזי רמ"י, כינוסי נכסים, קרקעות להשבחה ומכירות פרטיות, מדורגות עם ציון עסקה והתראות בזמן אמת.';
+
 export const metadata: Metadata = {
-  title: "מאתר קרקעות ומגרשים | Deal Finder IL",
-  description:
-    "כל עסקאות הקרקע והמגרשים בישראל במקום אחד — מכרזי רמ\"י, כינוסי נכסים, קרקעות להשבחה ומכירות פרטיות, מדורגות עם ציון עסקה והתראות בזמן אמת.",
+  // Absolute base for the OG image; the deployment's public alias.
+  metadataBase: new URL("https://deal-finder-il.vercel.app"),
+  title: {
+    default: "קרקעHOT — מכרזי קרקע ומגרשים בישראל",
+    template: "%s | קרקעHOT",
+  },
+  description: DESCRIPTION,
+  applicationName: "קרקעHOT",
+  openGraph: {
+    title: "קרקעHOT — מכרזי קרקע ומגרשים בישראל",
+    description: DESCRIPTION,
+    locale: "he_IL",
+    type: "website",
+    images: [{ url: "/brand/karkahot-logo.png", width: 420, height: 114, alt: "קרקעHOT" }],
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

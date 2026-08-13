@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Search, Bell } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
+import { BrandMark } from "./BrandMark";
 
 function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
   return (
@@ -18,13 +19,8 @@ export function AppHeader() {
     <header className="sticky top-0 z-30 border-b border-border bg-bg/85 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-4 px-4">
         {/* Logo (start = right in RTL) */}
-        <Link href="/" className="flex items-center gap-2 shrink-0">
-          <span className="brand-mark flex h-8 w-8 items-center justify-center rounded-lg text-sm font-black text-white">
-            נ
-          </span>
-          <span className="hidden text-[15px] font-extrabold tracking-tight text-primary sm:block">
-            מאתר <span className="text-accent">קרקעות</span>
-          </span>
+        <Link href="/" className="flex shrink-0 items-center" aria-label="קרקעHOT — לדף הבית">
+          <BrandMark className="text-lg sm:text-xl" />
         </Link>
 
         {/* Global search */}

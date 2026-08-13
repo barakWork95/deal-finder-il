@@ -1,4 +1,6 @@
-# מאתר עסקאות נדל״ן — Deal Finder IL
+<img src="public/brand/karkahot-logo.png" alt="קרקעHOT" width="260">
+
+# קרקעHOT — מכרזי קרקע ומגרשים בישראל
 
 Hebrew-first, RTL PropTech platform that aggregates Israeli real-estate
 opportunities (foreclosures / כונסי נכסים, רמ״י tenders, price drops), benchmarks
