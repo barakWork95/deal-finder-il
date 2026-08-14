@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { BellPlus, LayoutGrid, Table2, Clock, ArrowLeft, Gavel, Map as MapIcon } from "lucide-react";
+import { BellPlus, LayoutGrid, Table2, Clock, ArrowLeft, Gavel, X, Map as MapIcon } from "lucide-react";
 import type { Deal, DealType } from "@/lib/types";
 import {
   DEAL_TYPE_LABEL,
@@ -15,6 +15,9 @@ import {
 import { DealBadge, DealTypeChip, ScoreChip, DiscountTag } from "@/components/ui";
 import { SaveDealButton } from "@/components/SaveDealButton";
 import { buildAlertHref } from "@/lib/alert-prefill";
+import { clearSearch, useSearchQuery } from "@/lib/search-store";
+import { matchesQuery } from "@/lib/deal-search";
+import { LogoLoader } from "@/components/LogoLoader";
 
 type SortKey = "score" | "discount" | "price_asc" | "deadline" | "expected_gap" | "premium";
 type ViewMode = "table" | "cards" | "map";
@@ -23,8 +26,8 @@ type ViewMode = "table" | "cards" | "map";
 const DealMap = dynamic(() => import("@/components/DealMap"), {
   ssr: false,
   loading: () => (
-    <div className="grid h-[clamp(420px,68vh,760px)] place-items-center rounded-xl border border-border bg-surface text-sm text-muted">
-      טוען מפה…
+    <div className="grid h-[clamp(420px,68vh,760px)] place-items-center rounded-xl border border-border bg-surface">
+      <LogoLoader label="טוען מפה…" />
     </div>
   ),
 });
@@ -58,6 +61,7 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
   const [onlyRealistic, setOnlyRealistic] = useState(false);
   const [sort, setSort] = useState<SortKey>("score");
   const [view, setView] = useState<ViewMode>("table");
+  const search = useSearchQuery();
   const isMobile = useIsMobile();
   // The wide table has no phone layout; the map does, so it stays available.
   const effectiveView: ViewMode = isMobile && view === "table" ? "cards" : view;
@@ -84,6 +88,7 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
       if (d.dealScore < minScore) return false;
       if (types.length && !types.includes(d.dealType)) return false;
       if (onlyRealistic && !((d.expectedGapPct ?? -1) > 0)) return false;
+      if (search && !matchesQuery(d, search)) return false;
       return true;
     });
     const nullLast = (v: number | undefined) => (v == null ? -Infinity : v);
@@ -107,7 +112,21 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
       }
     });
     return result;
-  }, [deals, city, maxPrice, minDiscount, minScore, types, sort, onlyRealistic]);
+  }, [deals, city, maxPrice, minDiscount, minScore, types, sort, onlyRealistic, search]);
+
+  // Search runs *inside* the active filters, so a city the filters already
+  // exclude looks like "no such tender". Only worth saying so when resetting
+  // would actually reveal them — hence the same predicate reset() leaves
+  // behind (gap >= 0), not "no filters at all".
+  const hiddenByFilters = useMemo(
+    () =>
+      search && filtered.length === 0
+        ? deals.filter(
+            (d) => d.status !== "sold" && d.discountPct >= 0 && matchesQuery(d, search),
+          ).length
+        : 0,
+    [deals, search, filtered.length],
+  );
 
   const activeFilterCount =
     (city ? 1 : 0) +
@@ -245,6 +264,17 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
         <p className="text-sm text-muted">
           <span className="num font-bold text-primary">{filtered.length}</span> עסקאות פעילות
         </p>
+        {search && (
+          <button
+            type="button"
+            onClick={clearSearch}
+            title="ניקוי החיפוש"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent-soft px-2.5 py-1 text-xs font-medium text-accent transition hover:brightness-110"
+          >
+            חיפוש: {search}
+            <X size={12} />
+          </button>
+        )}
         <div className="ms-auto flex items-center gap-3">
           <label className="flex items-center gap-2 text-sm text-muted">
             מיון:
@@ -276,7 +306,7 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState onReset={reset} />
+        <EmptyState onReset={reset} search={search} hiddenByFilters={hiddenByFilters} />
       ) : effectiveView === "map" ? (
         <DealMap deals={filtered} />
       ) : effectiveView === "table" ? (
@@ -507,17 +537,50 @@ function Th({ children }: { children?: React.ReactNode }) {
   return <th className="px-3 py-2.5 text-start font-medium">{children}</th>;
 }
 
-function EmptyState({ onReset }: { onReset: () => void }) {
+function EmptyState({
+  onReset,
+  search,
+  hiddenByFilters = 0,
+}: {
+  onReset: () => void;
+  search?: string;
+  hiddenByFilters?: number;
+}) {
+  // A search that finds nothing is a different dead end from filters that are
+  // too tight — pointing at the wrong one sends people to the wrong control.
   return (
     <div className="rounded-xl border border-dashed border-border bg-surface py-16 text-center">
-      <p className="mb-1 text-lg font-semibold text-primary">לא נמצאו עסקאות התואמות את הסינון</p>
-      <p className="mb-4 text-sm text-muted">נסה להרחיב את הקריטריונים או להסיר חלק מהמסננים.</p>
-      <button
-        onClick={onReset}
-        className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover"
-      >
-        ניקוי כל המסננים
-      </button>
+      <p className="mb-1 text-lg font-semibold text-primary">
+        {search ? `לא נמצאו מכרזים עבור "${search}"` : "לא נמצאו עסקאות התואמות את הסינון"}
+      </p>
+      <p className="mb-4 text-sm text-muted">
+        {hiddenByFilters > 0 ? (
+          <>
+            <span className="num font-bold text-primary">{hiddenByFilters}</span> מכרזים תואמים
+            לחיפוש אך מוסתרים על ידי הסינון הנוכחי.
+          </>
+        ) : search ? (
+          "אפשר לנסות עיר, גוש/חלקה או מספר מכרז — או לנקות את החיפוש."
+        ) : (
+          "נסה להרחיב את הקריטריונים או להסיר חלק מהמסננים."
+        )}
+      </p>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        {search && (
+          <button
+            onClick={clearSearch}
+            className="rounded-lg border border-border bg-surface-2 px-4 py-2 text-sm font-semibold text-primary transition hover:border-border-strong"
+          >
+            ניקוי החיפוש
+          </button>
+        )}
+        <button
+          onClick={onReset}
+          className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover"
+        >
+          ניקוי כל המסננים
+        </button>
+      </div>
     </div>
   );
 }

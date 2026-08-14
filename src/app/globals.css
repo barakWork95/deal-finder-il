@@ -347,3 +347,43 @@ select.input {
     animation: none;
   }
 }
+
+/* Branded loader: the wordmark breathing over a sweeping progress line. */
+@keyframes logo-loader-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.985);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes logo-loader-sweep {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+.logo-loader {
+  animation: logo-loader-pulse 1.6s ease-in-out infinite;
+}
+:root:not([data-theme="light"]) .logo-loader {
+  filter: drop-shadow(0 0 18px rgba(255, 122, 92, 0.35));
+}
+.logo-loader-bar {
+  animation: logo-loader-sweep 1.2s ease-in-out infinite;
+}
+/* RTL: the sweep should travel the way the eye reads. */
+[dir="rtl"] .logo-loader-bar {
+  animation-direction: reverse;
+}
+@media (prefers-reduced-motion: reduce) {
+  .logo-loader,
+  .logo-loader-bar {
+    animation: none;
+  }
+}
