@@ -107,7 +107,8 @@ export function AlertsPanel({
       name: name.trim() || `התראה · ${city || "כל הערים"}`,
       filters: {
         cities: city ? [city] : undefined,
-        maxPrice,
+        // Slider at the top means "no budget limit", not "up to ₪60M".
+        maxPrice: maxPrice < PRICE_MAX ? maxPrice : undefined,
         minDiscountPct: minDiscount || undefined,
         minScore: minScore || undefined,
         dealTypes: types.length ? types : undefined,
@@ -225,7 +226,9 @@ export function AlertsPanel({
             </select>
           </Field>
 
-          <Field label={`תקציב מקסימלי: ${formatILSCompact(maxPrice)}`}>
+          <Field
+            label={`תקציב מקסימלי: ${maxPrice >= PRICE_MAX ? "ללא הגבלה" : formatILSCompact(maxPrice)}`}
+          >
             <input
               type="range"
               min={500_000}

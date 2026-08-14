@@ -83,8 +83,14 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
     const result = deals.filter((d) => {
       if (d.status === "sold") return false;
       if (city && d.city !== city) return false;
-      if (d.askingPrice > maxPrice) return false;
-      if (d.discountPct < minDiscount) return false;
+      // At the top of the slider the budget stops constraining entirely — 13
+      // active tenders cost more than the slider's ceiling, and a control
+      // sitting at its maximum shouldn't still be hiding them.
+      if (maxPrice < PRICE_MAX && d.askingPrice > maxPrice) return false;
+      // 0 means "הכל" — no gap constraint at all, including tenders whose
+      // entry cost is *above* the appraisal. Treating 0 as ">= 0" quietly hid
+      // 189 of 335 active tenders behind a preset labelled "all".
+      if (minDiscount > 0 && d.discountPct < minDiscount) return false;
       if (d.dealScore < minScore) return false;
       if (types.length && !types.includes(d.dealType)) return false;
       if (onlyRealistic && !((d.expectedGapPct ?? -1) > 0)) return false;
@@ -115,15 +121,13 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
   }, [deals, city, maxPrice, minDiscount, minScore, types, sort, onlyRealistic, search]);
 
   // Search runs *inside* the active filters, so a city the filters already
-  // exclude looks like "no such tender". Only worth saying so when resetting
-  // would actually reveal them — hence the same predicate reset() leaves
-  // behind (gap >= 0), not "no filters at all".
+  // exclude looks like "no such tender". Counted against what reset() actually
+  // produces — now genuinely unfiltered — so the hint never promises results
+  // that clicking it won't reveal.
   const hiddenByFilters = useMemo(
     () =>
       search && filtered.length === 0
-        ? deals.filter(
-            (d) => d.status !== "sold" && d.discountPct >= 0 && matchesQuery(d, search),
-          ).length
+        ? deals.filter((d) => d.status !== "sold" && matchesQuery(d, search)).length
         : 0,
     [deals, search, filtered.length],
   );
@@ -152,7 +156,9 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
             </select>
           </FilterField>
 
-          <FilterField label={`תקציב מקסימלי: ${formatILSCompact(maxPrice)}`}>
+          <FilterField
+            label={`תקציב מקסימלי: ${maxPrice >= PRICE_MAX ? "ללא הגבלה" : formatILSCompact(maxPrice)}`}
+          >
             <input
               type="range"
               min={500_000}

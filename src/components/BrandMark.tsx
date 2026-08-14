@@ -1,3 +1,7 @@
+"use client";
+
+import { useId } from "react";
+
 /**
  * קרקעHOT wordmark — inline SVG so each half of the mark can take its own
  * paint: "קרקע" is filled with `currentColor` (so it inherits text-primary and
@@ -15,6 +19,14 @@
  * Order is baked into the geometry below, not left to the page's `dir`: the two
  * halves are translated past each other so the mark always reads קרקע on the
  * right, HOT + flame on the left.
+ *
+ * Ids are per instance (useId), not per variant. Scoping them by variant meant
+ * two marks of the same variant — the header's and the loader's — shared one
+ * set of ids, so `url(#…)` resolved to whichever came first in the document.
+ * On phones that was the header's copy, hidden behind `sm:block`: a mask inside
+ * a display:none subtree is never built, the reference died, and the rect
+ * painted unmasked as a grey block. Desktop hid the bug because the header's
+ * mark was visible there.
  */
 
 // Ink boundaries measured off /brand/karkahot-logo.png (420×114, 1 unit = 1px).
@@ -40,9 +52,10 @@ export function BrandMark({
   variant?: Variant;
   className?: string;
 }) {
-  // Both variants can be in the DOM at once (one hidden by a breakpoint), so
-  // every id is scoped to the variant to keep them unique.
-  const id = (name: string) => `karkahot-${variant}-${name}`;
+  // Strip the punctuation React puts in generated ids; what is left is still
+  // unique per instance and safe inside url(#…).
+  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const id = (name: string) => `karkahot-${uid}-${name}`;
   const box =
     variant === "flame"
       ? `${FLAME.left} ${FLAME.top} ${FLAME.right - FLAME.left} ${FLAME.bottom - FLAME.top}`
@@ -53,7 +66,7 @@ export function BrandMark({
       viewBox={box}
       role="img"
       aria-label="קרקעHOT"
-      className={`h-[1.5em] w-auto text-primary ${className}`}
+      className={`h-[1.5em] w-auto max-w-full shrink-0 text-primary ${className}`}
     >
       <defs>
         <linearGradient id={id("grad")} x1="0" y1="0" x2="0" y2="1">
