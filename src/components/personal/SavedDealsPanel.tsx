@@ -4,7 +4,8 @@ import Link from "next/link";
 import { ArrowLeft, BookmarkX, Gavel } from "lucide-react";
 import type { Deal } from "@/lib/types";
 import { deadlineLabel, formatILS, formatLandArea } from "@/lib/format";
-import { useSavedDealIds } from "@/lib/client-store";
+import { useSavedDeals } from "@/lib/personal-data";
+import type { UserData } from "@/lib/user-repository";
 import { DealTypeChip, DiscountTag, ScoreChip } from "@/components/ui";
 import { EmptyState, IconBtn } from "@/components/personal/controls";
 
@@ -13,8 +14,8 @@ import { EmptyState, IconBtn } from "@/components/personal/controls";
  * the live feed passed in by the server, so a saved deal never shows a stale
  * price or a deadline that has since moved.
  */
-export function SavedDealsPanel({ deals }: { deals: Deal[] }) {
-  const [ids, setIds] = useSavedDealIds();
+export function SavedDealsPanel({ deals, account }: { deals: Deal[]; account?: UserData }) {
+  const { ids, remove } = useSavedDeals(account);
   const byId = new Map(deals.map((d) => [d.id, d]));
 
   const saved = ids.map((id) => byId.get(id)).filter((d): d is Deal => Boolean(d));
@@ -39,7 +40,7 @@ export function SavedDealsPanel({ deals }: { deals: Deal[] }) {
           </span>
           <button
             type="button"
-            onClick={() => setIds(saved.map((d) => d.id))}
+            onClick={() => void Promise.all(ids.filter((id) => !byId.has(id)).map(remove))}
             className="font-semibold text-accent hover:underline"
           >
             הסרה מהרשימה
@@ -109,7 +110,7 @@ export function SavedDealsPanel({ deals }: { deals: Deal[] }) {
               </div>
 
               <IconBtn
-                onClick={() => setIds((prev) => prev.filter((x) => x !== d.id))}
+                onClick={() => void remove(d.id)}
                 title="הסרה מהעסקאות השמורות"
                 tone="danger"
               >

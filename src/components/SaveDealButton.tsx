@@ -1,7 +1,7 @@
 "use client";
 
 import { Bookmark } from "lucide-react";
-import { useIsDealSaved } from "@/lib/client-store";
+import { useSavedDeals } from "@/lib/personal-data";
 
 /**
  * Bookmark toggle. Cards and table rows are wrapped in a <Link>, so the click
@@ -16,7 +16,8 @@ export function SaveDealButton({
   variant?: "icon" | "labelled";
   className?: string;
 }) {
-  const [saved, toggle] = useIsDealSaved(dealId);
+  const { ids, toggle } = useSavedDeals();
+  const saved = ids.includes(dealId);
 
   const base =
     "inline-flex items-center justify-center gap-1.5 rounded-lg border text-xs font-semibold transition";
@@ -32,7 +33,7 @@ export function SaveDealButton({
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        toggle();
+        void toggle(dealId);
       }}
       className={`${base} ${tone} ${variant === "icon" ? "h-8 w-8" : "px-3 py-1.5"} ${className}`}
     >

@@ -94,9 +94,11 @@ export function useStoredState<T>(key: string, fallback: T): [T, Setter<T>] {
   return [value, set];
 }
 
-// ── Saved deals ────────────────────────────────────────────
+// ── Saved deals (guest mode) ───────────────────────────────
 // Only tender ids are stored; the deal itself is re-read from the database on
 // every page load, so a saved deal never shows a stale price or deadline.
+// Signed-in users go through personal-data.ts instead — this is the fallback
+// half of that interface, not a second way to do the same thing.
 
 export const SAVED_DEALS_KEY = "karkahot:saved-deals";
 const NO_IDS: string[] = [];
@@ -105,14 +107,6 @@ export function useSavedDealIds() {
   return useStoredState<string[]>(SAVED_DEALS_KEY, NO_IDS);
 }
 
-export function useIsDealSaved(id: string): [boolean, () => void] {
-  const [ids, setIds] = useSavedDealIds();
-  const toggle = useCallback(
-    () => setIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [id, ...prev])),
-    [id, setIds],
-  );
-  return [ids.includes(id), toggle];
-}
 
 // ── Alerts ─────────────────────────────────────────────────
 // Saved locally until there are real accounts. Nothing is delivered yet —

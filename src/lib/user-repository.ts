@@ -40,6 +40,52 @@ export async function getUserData(clerkUserId: string): Promise<UserData> {
   };
 }
 
+export async function insertAlert(clerkUserId: string, alert: Alert): Promise<void> {
+  if (!hasDb) return;
+  await sql`
+    INSERT INTO user_alerts (id, clerk_user_id, name, filters, channels, frequency, is_active)
+    VALUES (${alert.id}, ${clerkUserId}, ${alert.name}, ${sql.json(alert.filters)},
+            ${alert.channels}, ${alert.frequency}, ${alert.isActive})
+    ON CONFLICT (id) DO NOTHING`;
+}
+
+// Every mutation is scoped by clerk_user_id as well as by id, so a guessed id
+// from another account simply matches no rows.
+export async function setAlertActive(
+  clerkUserId: string,
+  alertId: string,
+  isActive: boolean,
+): Promise<void> {
+  if (!hasDb) return;
+  await sql`
+    UPDATE user_alerts SET is_active = ${isActive}, updated_at = now()
+    WHERE id = ${alertId} AND clerk_user_id = ${clerkUserId}`;
+}
+
+export async function deleteAlert(clerkUserId: string, alertId: string): Promise<void> {
+  if (!hasDb) return;
+  await sql`DELETE FROM user_alerts WHERE id = ${alertId} AND clerk_user_id = ${clerkUserId}`;
+}
+
+export async function setDealSaved(
+  clerkUserId: string,
+  dealId: string,
+  saved: boolean,
+): Promise<void> {
+  if (!hasDb) return;
+  if (saved) {
+    // The SELECT drops ids that don't match a live tender.
+    await sql`
+      INSERT INTO user_saved_deals (clerk_user_id, deal_id)
+      SELECT ${clerkUserId}, d.id FROM deals d WHERE d.id = ${dealId}
+      ON CONFLICT DO NOTHING`;
+  } else {
+    await sql`
+      DELETE FROM user_saved_deals
+      WHERE clerk_user_id = ${clerkUserId} AND deal_id = ${dealId}`;
+  }
+}
+
 /**
  * Folds the browser's copy into the account's, then returns the union so the
  * client can adopt it. Alerts upsert by id (re-syncing the same browser is a

@@ -16,7 +16,9 @@ import {
 } from "lucide-react";
 import type { Alert, AlertChannel, AlertFrequency, Deal, DealType, Zoning } from "@/lib/types";
 import { DEAL_TYPE_LABEL, formatILSCompact } from "@/lib/format";
-import { ALERTS_KEY, useProfile, useStoredState } from "@/lib/client-store";
+import { useProfile } from "@/lib/client-store";
+import { usePersonalAlerts } from "@/lib/personal-data";
+import type { UserData } from "@/lib/user-repository";
 import { Chip, EmptyState, Field, IconBtn } from "@/components/personal/controls";
 import { ZONINGS, hasPrefill, type AlertPrefill } from "@/lib/alert-prefill";
 import { countMatches } from "@/lib/alert-match";
@@ -33,8 +35,6 @@ const FREQ: { key: AlertFrequency; label: string }[] = [
 ];
 
 const DEAL_TYPES: DealType[] = ["rami_tender", "foreclosure", "price_drop", "inheritance"];
-
-const NO_ALERTS: Alert[] = [];
 
 const PRICE_MAX = 60_000_000;
 
@@ -60,12 +60,14 @@ export function AlertsPanel({
   deals,
   cities,
   prefill = {},
+  account,
 }: {
   deals: Deal[];
   cities: string[];
   prefill?: AlertPrefill;
+  account?: UserData;
 }) {
-  const [alerts, setAlerts] = useStoredState<Alert[]>(ALERTS_KEY, NO_ALERTS);
+  const { alerts, create, setActive, remove, signedIn } = usePersonalAlerts(account);
   const [profile] = useProfile();
   const [justSaved, setJustSaved] = useState<string | null>(null);
 
@@ -116,7 +118,7 @@ export function AlertsPanel({
       isActive: true,
       triggeredThisMonth: 0,
     };
-    setAlerts((prev) => [alert, ...prev]);
+    void create(alert);
     setName("");
     setJustSaved(alert.id);
   }
@@ -161,8 +163,9 @@ export function AlertsPanel({
         <p className="mb-3 flex items-start gap-2 rounded-lg border border-border bg-surface-2 p-3 text-[11px] leading-relaxed text-muted">
           <Info size={14} className="mt-px shrink-0 text-accent" />
           <span>
-            ההתראות נשמרות בדפדפן הזה בלבד. השליחה בפועל ב-WhatsApp ובאימייל תופעל עם חיבור החשבון —
-            כרגע זו הגדרת הסינון שתרוץ אז.
+            {signedIn
+              ? "ההתראות שמורות בחשבון שלך וזמינות מכל מכשיר. השליחה בפועל ב-WhatsApp ובאימייל עדיין לא הופעלה — כרגע זו הגדרת הסינון שתרוץ אז."
+              : "ההתראות נשמרות בדפדפן הזה בלבד. התחברות תעביר אותן לחשבון ותסנכרן בין המכשירים, והשליחה בפועל תופעל בהמשך."}
           </span>
         </p>
 
@@ -173,12 +176,8 @@ export function AlertsPanel({
               alert={a}
               matches={countMatches(deals, a)}
               highlight={a.id === justSaved}
-              onToggle={() =>
-                setAlerts((prev) =>
-                  prev.map((x) => (x.id === a.id ? { ...x, isActive: !x.isActive } : x)),
-                )
-              }
-              onRemove={() => setAlerts((prev) => prev.filter((x) => x.id !== a.id))}
+              onToggle={() => void setActive(a.id, !a.isActive)}
+              onRemove={() => void remove(a.id)}
             />
           ))}
           {alerts.length === 0 && (

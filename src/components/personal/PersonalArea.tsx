@@ -4,8 +4,8 @@ import { useState } from "react";
 import { Bell, Bookmark, CreditCard, User, type LucideIcon } from "lucide-react";
 import type { Deal } from "@/lib/types";
 import type { AlertPrefill, PersonalTab } from "@/lib/alert-prefill";
-import { ALERTS_KEY, useSavedDealIds, useStoredState } from "@/lib/client-store";
-import type { Alert } from "@/lib/types";
+import { usePersonalAlerts, useSavedDeals } from "@/lib/personal-data";
+import type { UserData } from "@/lib/user-repository";
 import { AlertsPanel } from "@/components/personal/AlertsPanel";
 import { SavedDealsPanel } from "@/components/personal/SavedDealsPanel";
 import { AccountPanel } from "@/components/personal/AccountPanel";
@@ -21,18 +21,19 @@ const TABS: { key: TabKey; label: string; icon: LucideIcon }[] = [
   { key: "billing", label: "מנוי ותשלום", icon: CreditCard },
 ];
 
-const NO_ALERTS: Alert[] = [];
-
 export function PersonalArea({
   deals,
   cities,
   initialTab = "alerts",
   prefill = {},
+  account,
 }: {
   deals: Deal[];
   cities: string[];
   initialTab?: TabKey;
   prefill?: AlertPrefill;
+  /** The signed-in user's rows, already fetched server-side. */
+  account?: UserData;
 }) {
   const [tab, setTab] = useState<TabKey>(initialTab);
 
@@ -50,8 +51,8 @@ export function PersonalArea({
     params.set("tab", next);
     window.history.replaceState(null, "", `${window.location.pathname}?${params}`);
   }
-  const [alerts] = useStoredState<Alert[]>(ALERTS_KEY, NO_ALERTS);
-  const [savedIds] = useSavedDealIds();
+  const { alerts } = usePersonalAlerts(account);
+  const { ids: savedIds } = useSavedDeals(account);
 
   const counts: Partial<Record<TabKey, number>> = {
     alerts: alerts.length,
@@ -122,8 +123,10 @@ export function PersonalArea({
           <UserSync />
           {/* `key` restarts the entrance animation on every tab switch. */}
           <div key={tab} className="panel-in">
-          {tab === "alerts" && <AlertsPanel deals={deals} cities={cities} prefill={prefill} />}
-          {tab === "saved" && <SavedDealsPanel deals={deals} />}
+          {tab === "alerts" && (
+              <AlertsPanel deals={deals} cities={cities} prefill={prefill} account={account} />
+            )}
+          {tab === "saved" && <SavedDealsPanel deals={deals} account={account} />}
           {tab === "account" && <AccountPanel />}
             {tab === "billing" && <BillingPanel />}
           </div>

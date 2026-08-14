@@ -1,6 +1,7 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import { heIL } from "@clerk/localizations";
 import { isAuthConfigured } from "@/lib/auth";
+import { AuthStateProvider } from "@/components/AuthState";
 
 /**
  * Wraps the app in Clerk — but only when a publishable key is present.
@@ -17,7 +18,7 @@ import { isAuthConfigured } from "@/lib/auth";
  * Authentication → Social connections), not here.
  */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  if (!isAuthConfigured()) return <>{children}</>;
+  if (!isAuthConfigured()) return <AuthStateProvider>{children}</AuthStateProvider>;
 
   return (
     <ClerkProvider
@@ -34,7 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         },
       }}
     >
-      {children}
+      <AuthStateProvider>{children}</AuthStateProvider>
     </ClerkProvider>
   );
 }

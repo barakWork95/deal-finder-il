@@ -1,42 +1,60 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useUser } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 import { CloudUpload, Check, TriangleAlert } from "lucide-react";
 import type { Alert } from "@/lib/types";
-import { ALERTS_KEY, useSavedDealIds, useStoredState } from "@/lib/client-store";
-import { isAuthConfigured } from "@/lib/auth";
-
-const NO_ALERTS: Alert[] = [];
+import { ALERTS_KEY, SAVED_DEALS_KEY } from "@/lib/client-store";
+import { refreshAccount } from "@/lib/personal-data";
+import { useAuthState } from "@/components/AuthState";
 
 /**
- * Moves this browser's alerts and saved tenders into the signed-in account,
- * once per browser per user, then adopts whatever the account already had.
+ * One-time upload of whatever this browser collected as a guest, on the first
+ * sign-in per browser per account.
  *
- * Split in two on purpose: useUser() needs a ClerkProvider above it, so the
- * hook lives in a component that is only ever mounted when auth is configured.
+ * Once signed in the account is the source of truth (see personal-data.ts), so
+ * this only ever pushes *up* — it no longer writes the merged result back into
+ * localStorage, which would leave two copies drifting apart. The guest copy is
+ * left untouched so signing out still shows what the guest had.
+ *
+ * It reads storage directly rather than through the hooks: those now return the
+ * account's rows while signed in, and what needs uploading is precisely the
+ * browser's own leftovers.
  */
-export function UserSync() {
-  if (!isAuthConfigured()) return null;
-  return <ClerkUserSync />;
-}
-
 type Status = "idle" | "syncing" | "done" | "error";
 
-function ClerkUserSync() {
-  const { isSignedIn, user } = useUser();
-  const [alerts, setAlerts] = useStoredState<Alert[]>(ALERTS_KEY, NO_ALERTS);
-  const [savedIds, setSavedIds] = useSavedDealIds();
+function readLocal<T>(key: string, fallback: T): T {
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function UserSync() {
+  const { signedIn, loaded } = useAuthState();
   const [status, setStatus] = useState<Status>("idle");
+  const router = useRouter();
 
   useEffect(() => {
-    if (!isSignedIn || !user) return;
-    const doneKey = `karkahot:synced:${user.id}`;
-    if (window.localStorage.getItem(doneKey)) return;
+    if (!loaded || !signedIn) return;
 
     let cancelled = false;
 
     (async () => {
+      const alerts = readLocal<Alert[]>(ALERTS_KEY, []);
+      const savedDealIds = readLocal<string[]>(SAVED_DEALS_KEY, []);
+
+      // The marker is per browser; the server merge is idempotent anyway
+      // (alerts upsert by id), so a double run costs nothing but a request.
+      const doneKey = "karkahot:synced";
+      if (window.localStorage.getItem(doneKey)) return;
+      if (alerts.length === 0 && savedDealIds.length === 0) {
+        window.localStorage.setItem(doneKey, new Date().toISOString());
+        return;
+      }
+
       // Inside the callback rather than the effect body: a synchronous
       // setState there would cascade an extra render before the fetch starts.
       setStatus("syncing");
@@ -44,19 +62,14 @@ function ClerkUserSync() {
         const res = await fetch("/api/user/sync", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          // Read straight from storage: this runs once, and the merge has to
-          // carry everything in the browser, not just what a panel has read.
-          body: JSON.stringify({ alerts, savedDealIds: savedIds }),
+          body: JSON.stringify({ alerts, savedDealIds }),
         });
         if (!res.ok) throw new Error(String(res.status));
-        const merged = (await res.json()) as { alerts: Alert[]; savedDealIds: string[] };
         if (cancelled) return;
 
-        // Adopt the account's view so a second device converges instead of
-        // fighting the first one.
-        setAlerts(merged.alerts);
-        setSavedIds(merged.savedDealIds);
         window.localStorage.setItem(doneKey, new Date().toISOString());
+        refreshAccount(); // drop the client mirror
+        router.refresh(); // re-render the server copy with the merged rows
         setStatus("done");
       } catch {
         if (!cancelled) setStatus("error");
@@ -66,11 +79,9 @@ function ClerkUserSync() {
     return () => {
       cancelled = true;
     };
-    // Runs on sign-in only; the stored values are read inside on purpose.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSignedIn, user?.id]);
+  }, [signedIn, loaded, router]);
 
-  if (status === "idle" || !isSignedIn) return null;
+  if (status === "idle") return null;
 
   return (
     <p
@@ -83,19 +94,19 @@ function ClerkUserSync() {
       {status === "syncing" && (
         <>
           <CloudUpload size={14} className="shrink-0 animate-pulse text-accent" />
-          מסנכרן את ההתראות והעסקאות השמורות לחשבון…
+          מעביר את ההתראות והעסקאות השמורות של הדפדפן הזה לחשבון…
         </>
       )}
       {status === "done" && (
         <>
           <Check size={14} className="shrink-0 text-positive" />
-          הנתונים של הדפדפן הזה סונכרנו לחשבון שלך.
+          הנתונים שנשמרו בדפדפן הזה הועברו לחשבון שלך.
         </>
       )}
       {status === "error" && (
         <>
           <TriangleAlert size={14} className="shrink-0" />
-          הסנכרון לחשבון נכשל. הנתונים נשמרו בדפדפן הזה וננסה שוב בכניסה הבאה.
+          ההעברה לחשבון נכשלה. הנתונים עדיין שמורים בדפדפן וננסה שוב בכניסה הבאה.
         </>
       )}
     </p>
