@@ -61,11 +61,14 @@ export function AlertsPanel({
   cities,
   prefill = {},
   account,
+  delivery = { email: false, whatsapp: false },
 }: {
   deals: Deal[];
   cities: string[];
   prefill?: AlertPrefill;
   account?: UserData;
+  /** Which channels the server can actually send on right now. */
+  delivery?: { email: boolean; whatsapp: boolean };
 }) {
   const { alerts, create, setActive, remove, signedIn } = usePersonalAlerts(account);
   const [profile] = useProfile();
@@ -164,9 +167,13 @@ export function AlertsPanel({
         <p className="mb-3 flex items-start gap-2 rounded-lg border border-border bg-surface-2 p-3 text-[11px] leading-relaxed text-muted">
           <Info size={14} className="mt-px shrink-0 text-accent" />
           <span>
-            {signedIn
-              ? "ההתראות שמורות בחשבון שלך וזמינות מכל מכשיר. השליחה בפועל ב-WhatsApp ובאימייל עדיין לא הופעלה — כרגע זו הגדרת הסינון שתרוץ אז."
-              : "ההתראות נשמרות בדפדפן הזה בלבד. התחברות תעביר אותן לחשבון ותסנכרן בין המכשירים, והשליחה בפועל תופעל בהמשך."}
+            {!signedIn
+              ? "ההתראות נשמרות בדפדפן הזה בלבד. התחברות תעביר אותן לחשבון, תסנכרן בין המכשירים ותאפשר לנו לשלוח אותן בפועל."
+              : delivery.email
+                ? `ההתראות שמורות בחשבון שלך ונשלחות בפועל${
+                    delivery.whatsapp ? " באימייל וב-WhatsApp" : " באימייל"
+                  }. בחשבון החינמי הן מגיעות בסיכום יומי; במנוי PRO — מיד עם פרסום המכרז.`
+                : "ההתראות שמורות בחשבון שלך וזמינות מכל מכשיר. השליחה בפועל ב-WhatsApp ובאימייל עדיין לא הופעלה — כרגע זו הגדרת הסינון שתרוץ אז."}
           </span>
         </p>
 
