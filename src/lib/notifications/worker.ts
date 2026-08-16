@@ -126,7 +126,7 @@ export async function runNotificationWorker(options: WorkerOptions): Promise<Wor
       return finalise(summary, runId, started);
     }
 
-    await hydrateEmails(recipients);
+    await hydrateEmails(recipients, dryRun);
     const proIds = new Set(notificationSettings.proUserIds);
 
     for (const recipient of recipients) {
@@ -528,7 +528,7 @@ function unsubscribeUrl(recipient: Recipient): string | undefined {
  * step. Failures here are non-fatal: a recipient without an address is simply
  * not emailed this run.
  */
-async function hydrateEmails(recipients: Recipient[]): Promise<void> {
+async function hydrateEmails(recipients: Recipient[], dryRun: boolean): Promise<void> {
   const missing = recipients.filter((recipient) => !recipient.email);
   if (missing.length === 0 || !isAuthConfigured()) return;
 
@@ -548,6 +548,13 @@ async function hydrateEmails(recipients: Recipient[]): Promise<void> {
       if (!email) continue;
 
       recipient.email = email;
+
+      // A dry run resolves the address so its report is accurate, but stops
+      // short of storing it. Creating the contact row is a write, and "writes
+      // nothing" has to mean nothing — otherwise the safe way to inspect the
+      // worker quietly mutates the database it is inspecting.
+      if (dryRun) continue;
+
       // Persist it so the next run needs no Clerk round trip, and so the
       // person has an unsubscribe token before the first message goes out.
       const stored = await ensureContact(recipient.clerkUserId, email);
