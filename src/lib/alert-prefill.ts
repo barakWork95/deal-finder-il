@@ -50,8 +50,8 @@ export function scoreThresholdFor(score: number): number {
 export type PersonalTab = "alerts" | "saved" | "account" | "billing";
 const TABS: PersonalTab[] = ["alerts", "saved", "account", "billing"];
 
-export function parseTab(value: unknown): PersonalTab {
-  return TABS.includes(value as PersonalTab) ? (value as PersonalTab) : "alerts";
+export function parseTab(value: unknown, fallback: PersonalTab = "alerts"): PersonalTab {
+  return TABS.includes(value as PersonalTab) ? (value as PersonalTab) : fallback;
 }
 
 /** Only filters that are actually narrowing anything are worth carrying. */

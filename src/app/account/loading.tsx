@@ -1,0 +1,5 @@
+import { PageLoader } from "@/components/LogoLoader";
+
+export default function Loading() {
+  return <PageLoader label="טוען את פרטי החשבון…" />;
+}

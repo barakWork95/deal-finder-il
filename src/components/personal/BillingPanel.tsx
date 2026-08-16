@@ -31,7 +31,7 @@ const PLANS: Plan[] = [
   {
     key: "pro",
     name: "מסלול PRO",
-    price: "₪199",
+    price: "₪99",
     period: "לחודש",
     tagline: "להגיע למכרז הנכון לפני כולם",
     features: [

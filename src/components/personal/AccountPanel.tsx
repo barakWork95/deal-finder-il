@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check, Mail, MessageCircle, Trash2, User } from "lucide-react";
 import { clearLocalData, useProfile } from "@/lib/client-store";
 import { Field, IconInput } from "@/components/personal/controls";
+import { ClerkSecurityLink } from "@/components/personal/ClerkSecurityLink";
 
 /** Israeli mobile, with or without the leading zero / +972. */
 const PHONE_RE = /^(\+?972|0)?5\d{8}$/;
@@ -94,7 +95,9 @@ export function AccountPanel() {
           </p>
         )}
 
-        <div className="mt-5 flex items-center justify-end gap-3">
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <ClerkSecurityLink />
+          <span className="ms-auto" />
           {saved && !dirty && (
             <span className="flex items-center gap-1 text-xs font-semibold text-positive">
               <Check size={14} /> נשמר

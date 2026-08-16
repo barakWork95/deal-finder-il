@@ -1,7 +1,10 @@
 name: CI
 
 on:
+  # Long-lived branches get a run on every push. Feature branches are covered
+  # by their pull request, so this doesn't double up on every PR commit.
   push:
+    branches: [main, staging]
   pull_request:
 
 # A new push to the same branch makes an in-flight run pointless.
@@ -25,8 +28,9 @@ jobs:
 
       - run: npm run lint
 
-      # No DATABASE_URL here on purpose: the repository layer falls back to
-      # mock data without one (src/lib/repository.ts), and every page that
+      # No DATABASE_URL or Clerk keys here on purpose: the repository layer
+      # falls back to mock data without one (src/lib/repository.ts), auth is
+      # guarded by isAuthConfigured (src/lib/auth.ts), and every page that
       # reads tenders is force-dynamic, so nothing touches Postgres at build
       # time. CI therefore needs no secrets.
       - run: npm run build

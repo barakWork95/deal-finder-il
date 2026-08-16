@@ -91,12 +91,19 @@ Lookups are cached in `db/data/geo_parcels.json` / `geo_cities.json`, so a
 re-run is nearly offline. A parcel that resolves more than 30 km from its
 settlement is rejected as a bad גוש match and falls back to the settlement.
 
-## CI
+## CI & branching
 
 `.github/workflows/ci.yml` runs `npm ci`, `npm run lint` and `npm run build` on
-every push and pull request. It needs **no secrets**: without `DATABASE_URL` the
-repository layer falls back to mock data, and every page that reads tenders is
+every pull request and on pushes to `main` and `staging`. It needs **no
+secrets**: without `DATABASE_URL` the repository layer falls back to mock data,
+auth is guarded by `isAuthConfigured`, and every page that reads tenders is
 `force-dynamic`, so nothing touches Postgres at build time.
+
+Work flows `feature → staging → main`; `main` is Production on Vercel and every
+other branch gets a Preview. **Preview needs its own copy of the environment
+variables** or it silently serves mock data with no sign-in — see
+[docs/BRANCHING.md](docs/BRANCHING.md) for the flow, the variables, and how to
+enforce it once branch protection is available on this repo.
 
 ## Auth (Clerk)
 

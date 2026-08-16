@@ -36,9 +36,16 @@ export function AuthButtons() {
         </SignInButton>
       }
     >
+      {/*
+        "נהל חשבון" opens Clerk's own profile modal by default, which duplicates
+        our פרטי חשבון screen. navigation mode sends it to ours instead; Clerk's
+        modal is still reachable from within it for the things only Clerk owns
+        (password, connected accounts, sessions).
+      */}
       <UserButton
+        userProfileMode="navigation"
+        userProfileUrl="/account"
         appearance={{ elements: { avatarBox: "h-9 w-9" } }}
-        userProfileProps={{ appearance: { variables: { colorPrimary: "#5a6bff" } } }}
       />
     </Show>
   );
