@@ -9,9 +9,18 @@ feature/x ──PR──▶ staging ──PR──▶ main
 
 | Branch | Vercel environment | URL |
 |---|---|---|
-| `main` | Production | https://deal-finder-il.vercel.app |
-| `staging` | Preview (stable) | `deal-finder-il-git-staging-<scope>.vercel.app` |
+| `main` | Production | https://deal-finder-il.vercel.app (public) |
+| `staging` | Preview (stable) | https://deal-finder-il-git-staging-barackv95-9177s-projects.vercel.app |
 | anything else | Preview (per branch/PR) | posted by Vercel on the PR |
+
+**Previews sit behind Vercel Deployment Protection.** Every preview URL — the
+stable staging one and the per-deployment ones — answers `302` to
+`vercel.com/sso-api` for anyone who isn't signed in to the Vercel account. That
+is fine for reviewing your own work in a logged-in browser, but a preview link
+cannot be handed to someone outside the account as-is. To share one, either turn
+Deployment Protection off for Preview (Vercel → Settings → Deployment
+Protection) or generate a Protection Bypass token and append it to the URL.
+Note that turning it off makes staging publicly readable.
 
 ## The flow
 
@@ -43,6 +52,15 @@ than failing loudly:
 Set all three for **Preview** as well (Vercel → Settings → Environment
 Variables → tick Preview). Use Clerk's **development** keys (`pk_test_` /
 `sk_test_`) for Preview and the live keys for Production.
+
+Because of Deployment Protection this could not be verified from outside the
+account. To check it yourself, open the staging URL in a browser signed in to
+Vercel and look for two things:
+
+- the feed header says **335 עסקאות פעילות** — a much smaller number means
+  `DATABASE_URL` is missing and it is serving mock data;
+- the header shows a **התחברות** button — an inert grey avatar instead means the
+  Clerk keys are missing.
 
 Preview deployments share the production Supabase database. That is fine for
 reading tenders, but anything written from a preview (alerts, saved deals)
