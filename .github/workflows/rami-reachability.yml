@@ -1,0 +1,94 @@
+name: רמ"י reachability probe
+
+# Can a GitHub-hosted runner talk to apps.land.gov.il?
+#
+# This decides where the ingestion pipeline lives. If the portal answers from
+# Actions, the whole chain (ingest → sync-phase → geocode → refresh-premium →
+# notify) becomes one scheduled workflow with no dependency on a laptop being
+# awake. If it does not, ingestion has to run from an Israeli IP — the user's
+# Mac via launchd, or a small IL VPS — and only the notify step can be hosted.
+#
+# READING THE RESULT REQUIRES A CONTROL. The portal's API tier drops out for
+# long stretches while the site itself keeps serving 200, so a 404 here means
+# "blocked" only if a probe from Israel succeeds at the same moment. Run
+# `npm run probe:rami` locally while this is going and compare:
+#
+#   both JSON      → reachable from Actions; host the pipeline there
+#   local JSON,
+#   Actions 404    → geo/IP restricted; ingestion stays on an Israeli IP
+#   both 404       → portal outage, inconclusive; re-dispatch later
+#
+# Probe only: never writes to the database and takes no secrets.
+
+on:
+  workflow_dispatch:
+    inputs:
+      attempts:
+        description: "How many times to retry before giving up"
+        required: false
+        default: "10"
+      interval:
+        description: "Seconds between attempts"
+        required: false
+        default: "60"
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Where is this runner
+        run: |
+          echo "public IP / geo of the runner:"
+          curl -s --max-time 20 "https://ipinfo.io/json" \
+            | grep -E '"(ip|city|region|country|org)"' || echo "  (ipinfo unavailable)"
+
+      - name: Probe the portal
+        env:
+          ATTEMPTS: ${{ inputs.attempts || '10' }}
+          INTERVAL: ${{ inputs.interval || '60' }}
+        run: |
+          BASE="https://apps.land.gov.il/MichrazimSite"
+          UA="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/140 Safari/537.36"
+
+          for i in $(seq 1 "$ATTEMPTS"); do
+            echo "──────── attempt $i/$ATTEMPTS ────────"
+
+            site=$(curl -s -o /dev/null -m 30 -w '%{http_code}' -c /tmp/c.txt -A "$UA" "$BASE/")
+            echo "  site                 -> $site"
+
+            # The API only answers with a session cookie from the site root and
+            # an explicit JSON Accept header; without either it serves the SPA's
+            # HTML error page instead.
+            code=$(curl -s -o /tmp/search.json -m 60 -w '%{http_code}' \
+              -b /tmp/c.txt -A "$UA" \
+              -H "Accept: application/json" -H "Content-Type: application/json" \
+              -X POST -d '{}' "$BASE/api/SearchApi/Search")
+            size=$(wc -c < /tmp/search.json | tr -d ' ')
+            first=$(head -c 1 /tmp/search.json)
+            echo "  SearchApi/Search     -> $code (${size} bytes)"
+
+            if [ "$code" = "200" ] && [ "$first" != "<" ]; then
+              rows=$(grep -o '"MichrazID"' /tmp/search.json | wc -l | tr -d ' ')
+              echo "  parsed tenders       -> $rows"
+
+              mid=$(grep -o '"MichrazID":[0-9]*' /tmp/search.json | head -1 | cut -d: -f2)
+              det=$(curl -s -o /tmp/detail.json -m 60 -w '%{http_code}' \
+                -b /tmp/c.txt -A "$UA" -H "Accept: application/json" \
+                "$BASE/api/MichrazDetailsApi/Get?michrazID=$mid")
+              echo "  MichrazDetailsApi    -> $det (tender $mid)"
+
+              echo
+              echo "VERDICT: REACHABLE from GitHub Actions."
+              echo "  search=200 with $rows tenders, detail=$det"
+              echo "  Control needed: only meaningful alongside a local probe."
+              exit 0
+            fi
+
+            echo "  (HTML or non-200 — portal API tier is down, or we are blocked)"
+            [ "$i" -lt "$ATTEMPTS" ] && sleep "$INTERVAL"
+          done
+
+          echo
+          echo "VERDICT: NOT REACHABLE in this window."
+          echo "  Inconclusive on its own — compare with the local control:"
+          echo "  local JSON at the same time => blocked; local 404 too => outage."
