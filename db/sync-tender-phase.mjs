@@ -18,8 +18,8 @@
  */
 
 import postgres from "postgres";
+import { getJson, warmSession, RAMI_API } from "./rami-http.mjs";
 
-const BASE = "https://apps.land.gov.il/MichrazimSite";
 const sql = postgres(process.env.DATABASE_URL || "postgres://localhost/deal_finder", {
   max: 3,
   idle_timeout: 20,
@@ -44,30 +44,21 @@ async function fetchTenders() {
   }
 
   console.log("→ warming session…");
-  const warm = await fetch(`${BASE}/`, { headers: { "User-Agent": "Mozilla/5.0" } });
-  const cookie = warm.headers.getSetCookie?.().join("; ") ?? "";
+  await warmSession();
 
   console.log("→ fetching tender list…");
-  const res = await fetch(`${BASE}/api/SearchApi/Search`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      "User-Agent": "Mozilla/5.0",
-      ...(cookie ? { Cookie: cookie } : {}),
+  // Retries through the portal's flapping rather than failing the run; --file
+  // remains the escape hatch for a window long enough to outlast the budget.
+  return getJson(
+    `${RAMI_API}/SearchApi/Search`,
+    { method: "POST", body: "{}" },
+    {
+      label: "SearchApi/Search",
+      attempts: 6,
+      onRetry: ({ attempt, attempts, delay, reason }) =>
+        console.log(`  retry ${attempt}/${attempts} in ${delay}ms — ${reason}`),
     },
-    body: "{}",
-  });
-  if (!res.ok) throw new Error(`search failed: HTTP ${res.status}`);
-
-  const text = await res.text();
-  if (text.trimStart().startsWith("<")) {
-    throw new Error(
-      "the portal returned HTML, not JSON — its API tier is intermittently down. " +
-        "Retry later, or pass --file with a saved search response.",
-    );
-  }
-  return JSON.parse(text);
+  );
 }
 
 async function main() {

@@ -18,15 +18,24 @@
 //   DATABASE_URL=... node db/ingest-rami.mjs --limit 50
 //   DATABASE_URL=... node db/ingest-rami.mjs --all      # include closed ones
 import postgres from "postgres";
+import { getJson, warmSession, RAMI_BASE, RAMI_API } from "./rami-http.mjs";
 
-const BASE = "https://apps.land.gov.il/MichrazimSite";
-const API = `${BASE}/api`;
-const UA =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
-
+const BASE = RAMI_BASE;
+const API = RAMI_API;
 const args = process.argv.slice(2);
 const LIMIT = args.includes("--limit") ? Number(args[args.indexOf("--limit") + 1]) : Infinity;
 const INCLUDE_ALL = args.includes("--all");
+/**
+ * Fetch details only for tenders we have never seen, or whose status changed.
+ *
+ * The hourly pipeline uses this. A full pass is ~470 detail calls; run every
+ * hour that is 11,000 requests a day at a government portal, which is both
+ * rude and a good way to earn the block we just proved does not exist. The
+ * search endpoint already tells us everything that changed, so the expensive
+ * per-tender call is reserved for tenders that actually need it — typically a
+ * handful. The nightly full run still refreshes prices for everything.
+ */
+const NEW_ONLY = args.includes("--new-only");
 const DELAY_MS = 250;
 
 const sql = postgres(process.env.DATABASE_URL || "postgres://localhost/deal_finder", {
@@ -34,26 +43,11 @@ const sql = postgres(process.env.DATABASE_URL || "postgres://localhost/deal_find
   onnotice: () => {},
 });
 
-// ---- tiny cookie jar (the portal sets a session cookie on the SPA root) ----
-let cookie = "";
-async function http(url, init = {}) {
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      "User-Agent": UA,
-      Accept: "application/json, text/plain, */*",
-      Referer: `${BASE}/`,
-      ...(cookie ? { Cookie: cookie } : {}),
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
-      ...init.headers,
-    },
-  });
-  const setCookie = res.headers.getSetCookie?.() ?? [];
-  if (setCookie.length) {
-    cookie = setCookie.map((c) => c.split(";")[0]).join("; ");
-  }
-  return res;
-}
+// Every portal call goes through the retrying client: the API flaps on a
+// minutes timescale, so a single failure means "wait and ask again", not
+// "give up on this tender" (see db/rami-http.mjs).
+const noteRetry = ({ attempt, attempts, delay, reason, label }) =>
+  console.log(`    retry ${attempt}/${attempts} in ${delay}ms — ${label}: ${reason}`);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -113,16 +107,16 @@ function scoreOf({ discountPct, daysToAction, notStarted, zoning, hasAppraisal }
 
 async function main() {
   console.log("→ warming session…");
-  await http(`${BASE}/`);
+  await warmSession();
 
   console.log("→ lookups…");
-  const tables = await (await http(`${API}/GeneralTablesApi`)).json();
+  const tables = await getJson(`${API}/GeneralTablesApi`, {}, { label: "GeneralTablesApi", onRetry: noteRetry });
   const tableRows = Array.isArray(tables) ? tables : Object.values(tables);
   const sugMichraz = new Map(
     tableRows.filter((r) => r.TableName === "סוג מכרז").map((r) => [r.Code, r.Value]),
   );
 
-  const yeshuvim = await (await http(`${API}/YeshuvimApi/Get`)).json();
+  const yeshuvim = await getJson(`${API}/YeshuvimApi/Get`, {}, { label: "YeshuvimApi", onRetry: noteRetry });
   const cityByCode = new Map(
     (Array.isArray(yeshuvim) ? yeshuvim : Object.values(yeshuvim)).map((y) => [
       y.mtysvSemelYishuv,
@@ -132,11 +126,15 @@ async function main() {
   console.log(`  ${cityByCode.size} settlements, ${sugMichraz.size} tender types`);
 
   console.log("→ searching tenders…");
-  const all = await (await http(`${API}/SearchApi/Search`, { method: "POST", body: "{}" })).json();
+  const all = await getJson(
+    `${API}/SearchApi/Search`,
+    { method: "POST", body: "{}" },
+    { label: "SearchApi/Search", onRetry: noteRetry },
+  );
   console.log(`  ${all.length} tenders total`);
 
   const now = Date.now();
-  const candidates = all
+  let candidates = all
     .filter((t) => {
       if (INCLUDE_ALL) return true;
       // 1 = מפורסם, 2 = פתוח להגשת הצעות
@@ -147,6 +145,24 @@ async function main() {
     .sort((a, b) => new Date(a.SgiraDate) - new Date(b.SgiraDate))
     .slice(0, LIMIT);
   console.log(`  ${candidates.length} active tenders to ingest`);
+
+  if (NEW_ONLY) {
+    // rami_tenders_seen, not `deals`: most active tenders legitimately produce
+    // no rows (apartment tenders, no minimum price, aggregate areas), and
+    // judging by `deals` would make those permanently "new" and re-fetch them
+    // every hour forever. A recorded status change still forces a re-fetch, so
+    // a tender crossing טרם החל → פתוח is picked up.
+    const known = await sql`SELECT michraz_id, source_status FROM rami_tenders_seen`;
+    const statusById = new Map(known.map((r) => [String(r.michraz_id), r.source_status]));
+
+    const before = candidates.length;
+    candidates = candidates.filter((t) => {
+      const seen = statusById.has(String(t.MichrazID));
+      if (!seen) return true;
+      return statusById.get(String(t.MichrazID)) !== t.StatusMichraz;
+    });
+    console.log(`  --new-only: ${candidates.length} of ${before} need a detail fetch`);
+  }
 
   const [src] = await sql`
     INSERT INTO sources (name, source_type, base_url, is_real)
@@ -163,9 +179,14 @@ async function main() {
   for (const [i, t] of candidates.entries()) {
     let detail;
     try {
-      const res = await http(`${API}/MichrazDetailsApi/Get?michrazID=${t.MichrazID}`);
-      detail = await res.json();
-    } catch {
+      detail = await getJson(
+        `${API}/MichrazDetailsApi/Get?michrazID=${t.MichrazID}`,
+        {},
+        { label: `detail ${t.MichrazID}`, onRetry: noteRetry },
+      );
+    } catch (error) {
+      // Only after the retry budget is spent is this a real failure.
+      console.log(`  ✗ ${t.MichrazID}: ${error.message}`);
       failed++;
       continue;
     }
@@ -187,6 +208,7 @@ async function main() {
       ? Math.ceil((opensAt.getTime() - now) / 864e5)
       : daysLeft;
     const tikList = Array.isArray(detail?.Tik) && detail.Tik.length ? detail.Tik : [null];
+    let tenderPlots = 0;
 
     for (const [k, tik] of tikList.entries()) {
       const areaSqm = Number(tik?.Shetach) || 0;
@@ -263,7 +285,19 @@ async function main() {
           badges = EXCLUDED.badges,
           last_updated_at = now()`;
       plots++;
+      tenderPlots++;
     }
+
+    // Recorded whether or not it produced anything — "examined, nothing for
+    // us" is the answer that keeps the hourly run cheap.
+    await sql`
+      INSERT INTO rami_tenders_seen (michraz_id, source_status, sgira_date, plots, checked_at)
+      VALUES (${String(t.MichrazID)}, ${t.StatusMichraz ?? null}, ${deadline}, ${tenderPlots}, now())
+      ON CONFLICT (michraz_id) DO UPDATE SET
+        source_status = EXCLUDED.source_status,
+        sgira_date    = EXCLUDED.sgira_date,
+        plots         = EXCLUDED.plots,
+        checked_at    = now()`;
 
     if ((i + 1) % 25 === 0) console.log(`  …${i + 1}/${candidates.length} tenders → ${plots} plots`);
   }
