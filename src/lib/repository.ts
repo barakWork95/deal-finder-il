@@ -33,6 +33,8 @@ function mapDeal(row: Record<string, unknown>, comps: HistoricalTransaction[], a
     developmentCosts: row.development_costs == null ? undefined : num(row.development_costs),
     askingPrice: num(row.asking_price),
     submissionDeadline: iso(row.submission_deadline),
+    submissionOpensAt: iso(row.submission_opens_at),
+    sourceStatus: row.source_status == null ? undefined : num(row.source_status),
     estMarketValue: num(row.est_market_value),
     discountPct: num(row.discount_pct),
     dealScore: num(row.deal_score),

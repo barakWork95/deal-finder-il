@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { ArrowLeft, BookmarkX, Gavel } from "lucide-react";
 import type { Deal } from "@/lib/types";
-import { deadlineLabel, formatILS, formatLandArea } from "@/lib/format";
+import { formatILS, formatLandArea } from "@/lib/format";
+import { submissionInfo } from "@/lib/tender-phase";
 import { useSavedDeals } from "@/lib/personal-data";
 import type { UserData } from "@/lib/user-repository";
 import { DealTypeChip, DiscountTag, ScoreChip } from "@/components/ui";
@@ -96,7 +97,7 @@ export function SavedDealsPanel({ deals, account }: { deals: Deal[]; account?: U
 
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
                   <DealTypeChip type={d.dealType} />
-                  <span className="text-faint">{deadlineLabel(d.submissionDeadline)}</span>
+                  <span className="text-faint">{submissionInfo(d).label}</span>
                   <span className="text-faint">
                     פער משומה: <DiscountTag pct={d.discountPct} />
                   </span>

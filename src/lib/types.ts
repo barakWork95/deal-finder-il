@@ -35,11 +35,21 @@ export type Zoning =
   | "תיירות"
   | "מבני ציבור";
 
+/**
+ * Where a tender sits in its own timeline. Lives here with the other domain
+ * unions; the logic that derives it from the dates is in tender-phase.ts,
+ * which is also where the labels are. Deliberately NOT `deals.status` — that
+ * column is our lifecycle (active/expired/sold/withdrawn) and every read
+ * filters on it.
+ */
+export type TenderPhase = "not_started" | "open" | "closing_soon" | "closed";
+
 export type BadgeKind =
   | "motivated_seller" // מוכר לחוץ
   | "deadline_soon" // זמן קצר להגשה
   | "below_average" // מתחת לשומה (below the official appraisal)
-  | "rezoning_potential"; // פוטנציאל השבחה (rezoning upside)
+  | "rezoning_potential" // פוטנציאל השבחה (rezoning upside)
+  | "not_started"; // טרם החל — published, bidding has not opened yet
 
 export interface HistoricalTransaction {
   id: string;
@@ -88,7 +98,15 @@ export interface Deal {
 
   // financials
   askingPrice: number; // מחיר מבוקש / מינימום
-  submissionDeadline?: string; // ISO — מועד אחרון להגשה
+  submissionDeadline?: string; // ISO — מועד אחרון להגשה (רמ"י SgiraDate)
+  /**
+   * ISO — when bidding opens (רמ"י PtichaDate). A tender published but not yet
+   * open is "טרם החל"; see tenderPhase(), which derives that rather than
+   * trusting a stored flag that would go stale the moment the date passes.
+   */
+  submissionOpensAt?: string;
+  /** Raw רמ"י StatusMichraz (1 מפורסם, 2 פתוח להגשת הצעות, …), as reported. */
+  sourceStatus?: number;
 
   // computed
   estMarketValue: number;
@@ -140,6 +158,8 @@ export interface Alert {
     dealTypes?: DealType[];
     zonings?: Zoning[];
     minScore?: number;
+    /** Empty/absent = every phase, matching how the feed's chips behave. */
+    phases?: TenderPhase[];
   };
   channels: AlertChannel[];
   frequency: AlertFrequency;

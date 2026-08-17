@@ -96,6 +96,7 @@ export const BADGE_LABEL: Record<BadgeKind, string> = {
   deadline_soon: "זמן קצר להגשה",
   below_average: "מתחת לשומה",
   rezoning_potential: "פוטנציאל השבחה",
+  not_started: "טרם החל",
 };
 
 /** Semantic color token name for a Deal Score. */
