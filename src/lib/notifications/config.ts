@@ -120,6 +120,14 @@ export const notificationSettings = {
   get freeDelayHours() {
     return int("NOTIFY_FREE_DELAY_HOURS", 24);
   },
+  /**
+   * How far ahead of a tender opening to send the "it opens soon" message.
+   * 36h so a morning run reaches someone the day before, without firing so
+   * early that "נפתח להגשה" is untrue for days.
+   */
+  get openingLeadHours() {
+    return int("NOTIFY_OPENING_LEAD_HOURS", 36);
+  },
   /** Most tenders in one message before it becomes "ועוד N". */
   get maxItemsPerMessage() {
     return int("NOTIFY_MAX_ITEMS_PER_MESSAGE", 5);

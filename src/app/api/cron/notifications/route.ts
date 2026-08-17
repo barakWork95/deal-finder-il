@@ -42,7 +42,11 @@ function authorise(request: NextRequest): NextResponse | null {
 
 function parseModes(value: string | null): WorkerMode[] {
   if (value === "digest") return ["digest"];
+  if (value === "opening") return ["opening"];
+  // "both" predates the opening pass and stays as it was, so an existing cron
+  // entry does not silently start sending a new kind of message.
   if (value === "both") return ["instant", "digest"];
+  if (value === "all") return ["instant", "opening", "digest"];
   return ["instant"];
 }
 

@@ -341,3 +341,95 @@ export function whatsappAlert(options: {
     },
   };
 }
+
+/**
+ * Bidding is about to open on a tender the person already heard about.
+ *
+ * Deliberately not a repeat of the discovery message: they have seen the
+ * address and the entry cost. What changed is that they can now act, so the
+ * subject leads with the opening and the body stays short.
+ */
+export function openingEmail(options: {
+  alertName: string;
+  deals: MessageDeal[];
+  remainder?: number;
+  siteUrl: string;
+  unsubscribeUrl?: string;
+}) {
+  const { alertName, deals, remainder = 0, siteUrl, unsubscribeUrl } = options;
+  const count = deals.length + remainder;
+  const subject =
+    count === 1
+      ? `נפתח להגשה: ${deals[0]?.city ?? ""} — ${deals[0]?.rawAddress ?? ""}`
+      : `${count} מכרזים שעקבת אחריהם נפתחים להגשה`;
+
+  return {
+    subject,
+    html: emailShell({
+      title: subject,
+      intro:
+        'ההגשה למכרזים הבאים נפתחת כעת. מכאן ואילך אפשר להגיש הצעה — שימו לב למועד האחרון להגשה.',
+      deals,
+      remainder,
+      siteUrl,
+      footerNote: `נשלח כי המכרז תואם את ההתראה "${alertName}" וההגשה בו נפתחת עכשיו.`,
+      unsubscribeUrl,
+    }),
+    text: textBody(
+      [
+        subject,
+        "",
+        ...deals.map(
+          (deal) =>
+            `• ${deal.rawAddress || deal.city} — ${dealLine(deal)} — עלות כניסה ${formatILS(
+              deal.askingPrice,
+            )} — ${dateLine(deal).label} ${dateLine(deal).date} — ${dealUrl(siteUrl, deal.id)}`,
+        ),
+      ],
+      siteUrl,
+      unsubscribeUrl,
+    ),
+  };
+}
+
+/** The same moment, on WhatsApp. */
+export function whatsappOpening(options: {
+  alertName: string;
+  deals: MessageDeal[];
+  remainder?: number;
+  siteUrl: string;
+}): { body: string; templateVariables: Record<string, string> } {
+  const { alertName, deals, remainder = 0, siteUrl } = options;
+  const count = deals.length + remainder;
+  const summary =
+    count === 1 ? "מכרז שעקבת אחריו נפתח להגשה" : `${count} מכרזים שעקבת אחריהם נפתחים להגשה`;
+
+  const items = deals
+    .map(
+      (deal) =>
+        `• ${deal.rawAddress || deal.city} · ${formatLandArea(deal.areaSqm)} · ${formatILS(
+          deal.askingPrice,
+        )}\n  מועד אחרון להגשה: ${dateLine(deal).date}\n  ${dealUrl(siteUrl, deal.id)}`,
+    )
+    .join("\n");
+
+  const body = [
+    `*קרקעHOT* — ${summary}`,
+    "",
+    items,
+    remainder > 0 ? `\nועוד ${remainder} מכרזים.` : "",
+    "",
+    'מחיר המינימום במכרזי רמ"י הוא פתיחה בלבד; המחיר הסופי גבוה ממנו.',
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return {
+    body,
+    templateVariables: {
+      "1": alertName,
+      "2": summary,
+      "3": deals[0] ? dealUrl(siteUrl, deals[0].id) : `${siteUrl}/alerts`,
+    },
+  };
+}

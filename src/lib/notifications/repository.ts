@@ -183,20 +183,27 @@ export async function listRecipients(): Promise<Recipient[]> {
  * retryable and has attempts left — a rejected API key fails the same way on
  * every run, so repeating it would just spend the budget.
  */
+export type DeliveryReason = "new" | "opening";
+
 export async function claimDeliveries(params: {
   alertId: string;
   clerkUserId: string;
   channel: AlertChannel;
   dealIds: string[];
   maxAttempts: number;
+  /** 'new' = first sighting, 'opening' = bidding is about to start. */
+  reason?: DeliveryReason;
 }): Promise<string[]> {
   if (!hasDb || params.dealIds.length === 0) return [];
 
+  const reason = params.reason ?? "new";
+
   const rows = await sql`
-    INSERT INTO notification_deliveries (alert_id, deal_id, channel, clerk_user_id, status, attempts)
-    SELECT ${params.alertId}, d, ${params.channel}, ${params.clerkUserId}, 'queued', 1
+    INSERT INTO notification_deliveries
+      (alert_id, deal_id, channel, clerk_user_id, status, attempts, reason)
+    SELECT ${params.alertId}, d, ${params.channel}, ${params.clerkUserId}, 'queued', 1, ${reason}
     FROM unnest(${params.dealIds}::text[]) AS d
-    ON CONFLICT (alert_id, deal_id, channel) DO UPDATE SET
+    ON CONFLICT (alert_id, deal_id, channel, reason) DO UPDATE SET
       status    = 'queued',
       attempts  = notification_deliveries.attempts + 1,
       queued_at = now(),
@@ -215,6 +222,7 @@ export async function markDeliveries(params: {
   channel: AlertChannel;
   dealIds: string[];
   outcome: SendOutcome;
+  reason?: DeliveryReason;
 }): Promise<void> {
   if (!hasDb || params.dealIds.length === 0) return;
   const { outcome } = params;
@@ -229,6 +237,7 @@ export async function markDeliveries(params: {
       sent_at             = CASE WHEN ${outcome.status} = 'sent' THEN now() ELSE sent_at END
     WHERE alert_id = ${params.alertId}
       AND channel  = ${params.channel}
+      AND reason   = ${params.reason ?? "new"}
       AND deal_id  = ANY(${params.dealIds})`;
 }
 
@@ -242,19 +251,21 @@ export async function releaseDeliveries(params: {
   alertId: string;
   channel: AlertChannel;
   dealIds: string[];
+  reason?: DeliveryReason;
 }): Promise<void> {
   if (!hasDb || params.dealIds.length === 0) return;
   await sql`
     DELETE FROM notification_deliveries
     WHERE alert_id = ${params.alertId}
       AND channel  = ${params.channel}
+      AND reason   = ${params.reason ?? "new"}
       AND deal_id  = ANY(${params.dealIds})
       AND status   = 'queued'`;
 }
 
 // ── Run log ────────────────────────────────────────────────
 
-export async function startRun(mode: "instant" | "digest", dryRun: boolean): Promise<string | null> {
+export async function startRun(mode: "instant" | "digest" | "opening", dryRun: boolean): Promise<string | null> {
   if (!hasDb) return null;
   const [row] = await sql`
     INSERT INTO notification_runs (mode, dry_run) VALUES (${mode}, ${dryRun}) RETURNING id`;
