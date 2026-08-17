@@ -1,9 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, Bell, Share2, FileText, ExternalLink, Clock, type LucideIcon } from "lucide-react";
+import {
+  ArrowRight,
+  Bell,
+  Share2,
+  FileText,
+  ExternalLink,
+  Clock,
+  CalendarClock,
+  type LucideIcon,
+} from "lucide-react";
 import { getDealById } from "@/lib/repository";
 import {
-  deadlineLabel,
   formatDate,
   formatILS,
   formatPerSqm,
@@ -16,12 +24,14 @@ import { CmaChart } from "@/components/CmaChart";
 import DealLocationMap from "@/components/DealLocationMap";
 import { SaveDealButton } from "@/components/SaveDealButton";
 import { buildAlertHref, scoreThresholdFor } from "@/lib/alert-prefill";
+import { submissionInfo } from "@/lib/tender-phase";
 
 export default async function DealDetailPage({ params }: PageProps<"/deal/[id]">) {
   const { id } = await params;
   const deal = await getDealById(id);
   if (!deal) notFound();
 
+  const submission = submissionInfo(deal);
   const subjectPerSqm = Math.round(deal.askingPrice / deal.areaSqm);
   const sortedComps = [...deal.comps].sort(
     (a, b) => new Date(b.saleDate).getTime() - new Date(a.saleDate).getTime(),
@@ -125,13 +135,31 @@ export default async function DealDetailPage({ params }: PageProps<"/deal/[id]">
             {/* Deadline + source. Flex-wrap so the map panel can claim a full
                 row of its own below the buttons. */}
             <div className="mt-5 flex flex-wrap items-center gap-3 rounded-lg bg-surface-2 p-3">
+              {/* Both dates, because a tender that has not opened yet has two
+                  and only one of them is actionable. Showing just the deadline
+                  told 150 of 335 tenders' readers they had months to act on
+                  something they could not act on at all. */}
+              {submission.phase === "not_started" && (
+                <div className="flex items-center gap-2 text-sm">
+                  <CalendarClock size={16} className="text-accent" />
+                  <span className="text-muted">נפתח להגשה:</span>
+                  <span className="num font-bold text-primary" dir="ltr">
+                    {formatDate(deal.submissionOpensAt)}
+                  </span>
+                  <span className="text-accent">({submission.relative})</span>
+                </div>
+              )}
               <div className="flex items-center gap-2 text-sm">
-                <Clock size={16} className="text-warning" />
+                <Clock size={16} className={submission.urgent ? "text-warning" : "text-muted"} />
                 <span className="text-muted">מועד אחרון להגשה:</span>
                 <span className="num font-bold text-primary" dir="ltr">
                   {formatDate(deal.submissionDeadline)}
                 </span>
-                <span className="text-warning">({deadlineLabel(deal.submissionDeadline)})</span>
+                {submission.phase !== "not_started" && (
+                  <span className={submission.urgent ? "text-warning" : "text-muted"}>
+                    ({submission.label})
+                  </span>
+                )}
               </div>
               {deal.rawDocumentUrl && (
                 <a

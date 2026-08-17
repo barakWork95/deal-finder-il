@@ -14,7 +14,15 @@ import {
   Radar,
   type LucideIcon,
 } from "lucide-react";
-import type { Alert, AlertChannel, AlertFrequency, Deal, DealType, Zoning } from "@/lib/types";
+import type {
+  Alert,
+  AlertChannel,
+  AlertFrequency,
+  Deal,
+  DealType,
+  TenderPhase,
+  Zoning,
+} from "@/lib/types";
 import { DEAL_TYPE_LABEL, formatILSCompact } from "@/lib/format";
 import { useProfile } from "@/lib/client-store";
 import { usePersonalAlerts } from "@/lib/personal-data";
@@ -22,6 +30,7 @@ import type { UserData } from "@/lib/user-repository";
 import { Chip, EmptyState, Field, IconBtn } from "@/components/personal/controls";
 import { ZONINGS, hasPrefill, type AlertPrefill } from "@/lib/alert-prefill";
 import { countMatches } from "@/lib/alert-match";
+import { FILTERABLE_PHASES, PHASE_LABEL } from "@/lib/tender-phase";
 
 export const CHANNELS: { key: AlertChannel; label: string; icon: LucideIcon }[] = [
   { key: "whatsapp", label: "WhatsApp", icon: MessageCircle },
@@ -53,6 +62,7 @@ function initialForm(prefill: AlertPrefill) {
     minScore: prefill.minScore ?? (carried ? 0 : 80),
     types: prefill.types ?? (carried ? [] : (["rami_tender"] as DealType[])),
     zonings: prefill.zonings ?? [],
+    phases: prefill.phases ?? [],
   };
 }
 
@@ -84,6 +94,7 @@ export function AlertsPanel({
   const [minScore, setMinScore] = useState(start.minScore);
   const [types, setTypes] = useState<DealType[]>(start.types);
   const [zonings, setZonings] = useState<Zoning[]>(start.zonings);
+  const [phases, setPhases] = useState<TenderPhase[]>(start.phases);
   const [channels, setChannels] = useState<AlertChannel[]>(["email"]);
   const [frequency, setFrequency] = useState<AlertFrequency>("instant");
 
@@ -96,6 +107,7 @@ export function AlertsPanel({
     setMinScore(d.minScore);
     setTypes(d.types);
     setZonings(d.zonings);
+    setPhases(d.phases);
     setCarriedFilters(false);
   }
 
@@ -116,6 +128,7 @@ export function AlertsPanel({
         minScore: minScore || undefined,
         dealTypes: types.length ? types : undefined,
         zonings: zonings.length ? zonings : undefined,
+        phases: phases.length ? phases : undefined,
       },
       channels,
       frequency,
@@ -139,6 +152,7 @@ export function AlertsPanel({
       minScore: minScore || undefined,
       dealTypes: types.length ? types : undefined,
       zonings: zonings.length ? zonings : undefined,
+      phases: phases.length ? phases : undefined,
     },
     channels,
     frequency,
@@ -285,6 +299,19 @@ export function AlertsPanel({
 
         <div className="mt-4">
           <span className="mb-2 block text-[11px] font-medium text-faint">
+            שלב המכרז <span className="text-faint">(ריק = כל השלבים)</span>
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {FILTERABLE_PHASES.map((ph) => (
+              <Chip key={ph} active={phases.includes(ph)} onClick={() => toggle(phases, ph, setPhases)}>
+                {PHASE_LABEL[ph]}
+              </Chip>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <span className="mb-2 block text-[11px] font-medium text-faint">
             ייעוד תכנוני <span className="text-faint">(ריק = כל הייעודים)</span>
           </span>
           <div className="flex flex-wrap gap-2">
@@ -384,6 +411,7 @@ function AlertCard({
   if (f.minScore) summary.push(`ציון ${f.minScore}+`);
   if (f.dealTypes?.length) summary.push(f.dealTypes.map((t) => DEAL_TYPE_LABEL[t]).join(" · "));
   if (f.zonings?.length) summary.push(`ייעוד: ${f.zonings.join(", ")}`);
+  if (f.phases?.length) summary.push(`שלב: ${f.phases.map((p) => PHASE_LABEL[p]).join(", ")}`);
 
   return (
     <div

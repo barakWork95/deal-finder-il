@@ -3,15 +3,20 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { BellPlus, LayoutGrid, Table2, Clock, ArrowLeft, Gavel, X, Map as MapIcon } from "lucide-react";
-import type { Deal, DealType } from "@/lib/types";
 import {
-  DEAL_TYPE_LABEL,
-  deadlineInfo,
-  formatILS,
-  formatILSCompact,
-  formatLandArea,
-} from "@/lib/format";
+  BellPlus,
+  LayoutGrid,
+  Table2,
+  Clock,
+  CalendarClock,
+  ArrowLeft,
+  Gavel,
+  X,
+  Map as MapIcon,
+} from "lucide-react";
+import type { Deal, DealType, TenderPhase } from "@/lib/types";
+import { DEAL_TYPE_LABEL, formatILS, formatILSCompact, formatLandArea } from "@/lib/format";
+import { FILTERABLE_PHASES, PHASE_LABEL, matchesPhase, submissionInfo, tenderPhase } from "@/lib/tender-phase";
 import { DealBadge, DealTypeChip, ScoreChip, DiscountTag } from "@/components/ui";
 import { SaveDealButton } from "@/components/SaveDealButton";
 import { buildAlertHref } from "@/lib/alert-prefill";
@@ -19,7 +24,7 @@ import { clearSearch, useSearchQuery } from "@/lib/search-store";
 import { matchesQuery } from "@/lib/deal-search";
 import { LogoLoader } from "@/components/LogoLoader";
 
-type SortKey = "score" | "discount" | "price_asc" | "deadline" | "expected_gap" | "premium";
+type SortKey = "score" | "discount" | "price_asc" | "deadline" | "opens" | "expected_gap" | "premium";
 type ViewMode = "table" | "cards" | "map";
 
 // Leaflet touches `window` at import time, so the map never prerenders.
@@ -57,6 +62,10 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
   const [minDiscount, setMinDiscount] = useState<number>(0);
   const [minScore, setMinScore] = useState<number>(0);
   const [types, setTypes] = useState<DealType[]>([]);
+  // Empty = every phase. Roughly half the feed is טרם החל, so being able to
+  // say "only what I can bid on today" (or only what is still coming) is the
+  // difference between a browsable feed and a misleading one.
+  const [phases, setPhases] = useState<TenderPhase[]>([]);
   // "Realistic" = expected winning price still below the official appraisal.
   const [onlyRealistic, setOnlyRealistic] = useState(false);
   const [sort, setSort] = useState<SortKey>("score");
@@ -70,18 +79,27 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
     setTypes((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
   }
 
+  function togglePhase(p: TenderPhase) {
+    setPhases((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]));
+  }
+
   function reset() {
     setCity("");
     setMaxPrice(PRICE_MAX);
     setMinDiscount(0);
     setMinScore(0);
     setTypes([]);
+    setPhases([]);
     setOnlyRealistic(false);
   }
 
   const filtered = useMemo(() => {
+    // Read the clock once: deriving a phase per deal would let two tenders be
+    // judged against different "todays" in a single render.
+    const now = new Date();
     const result = deals.filter((d) => {
       if (d.status === "sold") return false;
+      if (phases.length && !matchesPhase(tenderPhase(d, now), phases)) return false;
       if (city && d.city !== city) return false;
       // At the top of the slider the budget stops constraining entirely — 13
       // active tenders cost more than the slider's ceiling, and a control
@@ -113,12 +131,23 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
           const bv = b.submissionDeadline ? new Date(b.submissionDeadline).getTime() : Infinity;
           return av - bv;
         }
+        case "opens": {
+          // Tenders already open have nothing to wait for, so they sort last
+          // behind everything with an opening date still ahead of it.
+          const av = a.submissionOpensAt ? new Date(a.submissionOpensAt).getTime() : Infinity;
+          const bv = b.submissionOpensAt ? new Date(b.submissionOpensAt).getTime() : Infinity;
+          // Reuses the single clock reading from the top of this pass — the
+          // lint rule forbids calling the clock here, and rightly so: a
+          // comparator that reads the time is not a stable ordering.
+          const t = now.getTime();
+          return (av < t ? Infinity : av) - (bv < t ? Infinity : bv);
+        }
         default:
           return b.dealScore - a.dealScore;
       }
     });
     return result;
-  }, [deals, city, maxPrice, minDiscount, minScore, types, sort, onlyRealistic, search]);
+  }, [deals, city, maxPrice, minDiscount, minScore, types, phases, sort, onlyRealistic, search]);
 
   // Search runs *inside* the active filters, so a city the filters already
   // exclude looks like "no such tender". Counted against what reset() actually
@@ -138,6 +167,7 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
     (minDiscount > 0 ? 1 : 0) +
     (minScore > 0 ? 1 : 0) +
     types.length +
+    phases.length +
     (onlyRealistic ? 1 : 0);
 
   return (
@@ -206,6 +236,29 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
             </div>
           </FilterField>
 
+          <FilterField label="שלב המכרז">
+            <div className="flex gap-1">
+              {FILTERABLE_PHASES.map((ph) => (
+                <button
+                  key={ph}
+                  onClick={() => togglePhase(ph)}
+                  title={
+                    ph === "not_started"
+                      ? "מכרזים שפורסמו אך ההגשה בהם טרם נפתחה"
+                      : "מכרזים שניתן להגיש אליהם הצעות כעת"
+                  }
+                  className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${
+                    phases.includes(ph)
+                      ? "border-accent bg-accent-soft text-accent"
+                      : "border-border bg-surface-2 text-muted hover:text-primary"
+                  }`}
+                >
+                  {PHASE_LABEL[ph]}
+                </button>
+              ))}
+            </div>
+          </FilterField>
+
           <FilterField label="סוג עסקה">
             <div className="flex flex-wrap gap-1">
               {DEAL_TYPES.map((t) => (
@@ -255,6 +308,7 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
                 minDiscount,
                 minScore,
                 types,
+                phases,
               })}
               title="פתיחת טופס התראה עם הסינון הנוכחי"
               className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs font-semibold text-primary transition hover:border-border-strong"
@@ -291,6 +345,7 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
               <option value="discount">פער משומה</option>
               <option value="price_asc">מחיר (נמוך לגבוה)</option>
               <option value="deadline">מועד הגשה קרוב</option>
+              <option value="opens">נפתח להגשה בקרוב</option>
             </select>
           </label>
           <div className="flex rounded-lg border border-border bg-surface p-0.5">
@@ -369,7 +424,7 @@ function DealTable({ deals }: { deals: Deal[] }) {
             <Th>עלות כניסה</Th>
             <Th>פער משומה</Th>
             <Th>פרמיית זכייה</Th>
-            <Th>מועד הגשה</Th>
+            <Th>מועד</Th>
             <Th>תגיות</Th>
             <Th />
           </tr>
@@ -403,7 +458,7 @@ function DealTable({ deals }: { deals: Deal[] }) {
                 <PremiumCell deal={d} />
               </td>
               <td className="px-3 py-3">
-                <DeadlineCell iso={d.submissionDeadline} />
+                <DeadlineCell deal={d} />
               </td>
               <td className="px-3 py-3">
                 <div className="flex flex-wrap gap-1">
@@ -494,7 +549,7 @@ function DealCards({ deals }: { deals: Deal[] }) {
             ))}
           </div>
           <div className="mt-auto flex items-center justify-between border-t border-border pt-3 text-xs">
-            <DeadlineCell iso={d.submissionDeadline} />
+            <DeadlineCell deal={d} />
             <span className="inline-flex items-center gap-1 font-semibold text-accent">
               פרטים <ArrowLeft size={14} />
             </span>
@@ -530,11 +585,20 @@ function PremiumCell({ deal }: { deal: Deal }) {
   );
 }
 
-function DeadlineCell({ iso }: { iso?: string }) {
-  const { label, urgent } = deadlineInfo(iso);
+/**
+ * The actionable date, not simply the deadline.
+ *
+ * Nearly half the live feed is טרם החל — published but not yet open for bids.
+ * Counting those down to their closing date reads as "you have 77 days" when
+ * the honest answer is "you cannot bid until the 24th".
+ */
+function DeadlineCell({ deal }: { deal: Deal }) {
+  const { label, urgent, phase } = submissionInfo(deal);
+  const tone =
+    phase === "not_started" ? "text-accent" : urgent ? "text-warning" : "text-muted";
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-medium ${urgent ? "text-warning" : "text-muted"}`}>
-      {iso && <Clock size={13} />} {label}
+    <span className={`inline-flex items-center gap-1 text-xs font-medium ${tone}`}>
+      {phase === "not_started" ? <CalendarClock size={13} /> : <Clock size={13} />} {label}
     </span>
   );
 }

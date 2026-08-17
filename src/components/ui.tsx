@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Flame, Clock, TrendingDown, Sprout, type LucideIcon } from "lucide-react";
+import { Flame, Clock, CalendarClock, TrendingDown, Sprout, type LucideIcon } from "lucide-react";
 import type { BadgeKind, DealType } from "@/lib/types";
 import { BADGE_LABEL, DEAL_TYPE_LABEL, scoreTone } from "@/lib/format";
 
@@ -8,6 +8,9 @@ const BADGE_STYLE: Record<BadgeKind, string> = {
   deadline_soon: "bg-warning-soft text-warning",
   below_average: "bg-positive-soft text-positive",
   rezoning_potential: "bg-accent-soft text-accent",
+  // Neutral, not warning: "טרם החל" is information, not urgency — the tender
+  // is simply not open yet.
+  not_started: "bg-surface-2 text-muted",
 };
 
 const BADGE_ICON: Record<BadgeKind, LucideIcon> = {
@@ -15,6 +18,7 @@ const BADGE_ICON: Record<BadgeKind, LucideIcon> = {
   deadline_soon: Clock,
   below_average: TrendingDown,
   rezoning_potential: Sprout,
+  not_started: CalendarClock,
 };
 
 export function DealBadge({ kind }: { kind: BadgeKind }) {

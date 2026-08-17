@@ -1,5 +1,6 @@
 import type { Deal } from "@/lib/types";
-import { deadlineLabel, formatILS, formatLandArea, formatDate } from "@/lib/format";
+import { formatILS, formatLandArea } from "@/lib/format";
+import { submissionInfo } from "@/lib/tender-phase";
 
 /**
  * Hebrew, RTL message bodies for both channels.
@@ -37,6 +38,7 @@ export type MessageDeal = Pick<
   | "dealScore"
   | "discountPct"
   | "submissionDeadline"
+  | "submissionOpensAt"
   | "expectedGapPct"
 >;
 
@@ -68,9 +70,27 @@ function dealLine(deal: MessageDeal): string {
   return parts.filter(Boolean).join(" · ");
 }
 
+/**
+ * The date line, phase-aware.
+ *
+ * A tender that opens in a week and closes in eleven has two dates, and
+ * quoting only the deadline tells someone they have eleven days to act when
+ * they cannot act at all yet. Alerts are sent once, on first sight (the
+ * delivery ledger is keyed per alert+tender+channel), so this one line has to
+ * carry the state the tender was in — hence "נפתח להגשה" rather than a
+ * deadline for anything still טרם החל.
+ */
+function dateLine(deal: MessageDeal): { label: string; date: string; relative: string } {
+  const info = submissionInfo(deal);
+  // Kept as three pieces: only the date is a number that needs LTR isolation.
+  // Wrapping the Hebrew "(בעוד 7 ימים)" in the same isolate would reverse it.
+  return { label: info.dateLabel, date: info.date, relative: info.relative };
+}
+
 // ── Email ──────────────────────────────────────────────────
 
 function dealCard(deal: MessageDeal, siteUrl: string): string {
+  const dates = dateLine(deal);
   const gap =
     deal.expectedGapPct != null && deal.expectedGapPct > 0
       ? `<div style="margin-top:6px;font-size:12px;color:#1c7c54">מתחת לשומה גם אחרי פרמיית זכייה צפויה (${num(
@@ -94,9 +114,7 @@ function dealCard(deal: MessageDeal, siteUrl: string): string {
                 עלות כניסה: <strong>${num(formatILS(deal.askingPrice))}</strong>
               </div>
               <div style="margin-top:4px;font-size:12px;color:${MUTED}">
-                מועד אחרון להגשה: ${num(formatDate(deal.submissionDeadline))} (${esc(
-                  deadlineLabel(deal.submissionDeadline),
-                )})
+                ${esc(dates.label)}: ${num(dates.date)} (${esc(dates.relative)})
               </div>
               ${gap}
             </td>
@@ -213,7 +231,7 @@ export function instantEmail(options: {
           (deal) =>
             `• ${deal.rawAddress || deal.city} — ${dealLine(deal)} — עלות כניסה ${formatILS(
               deal.askingPrice,
-            )} — ${dealUrl(siteUrl, deal.id)}`,
+            )} — ${dateLine(deal).label} ${dateLine(deal).date} — ${dealUrl(siteUrl, deal.id)}`,
         ),
         ...(remainder > 0 ? [`ועוד ${remainder} מכרזים תואמים.`] : []),
       ],
@@ -260,7 +278,7 @@ export function digestEmail(options: {
           (deal) =>
             `• ${deal.rawAddress || deal.city} — ${dealLine(deal)} — עלות כניסה ${formatILS(
               deal.askingPrice,
-            )} — ${dealUrl(siteUrl, deal.id)}`,
+            )} — ${dateLine(deal).label} ${dateLine(deal).date} — ${dealUrl(siteUrl, deal.id)}`,
         ),
         ...(remainder > 0 ? [`ועוד ${remainder} מכרזים תואמים.`] : []),
       ],
@@ -293,7 +311,7 @@ export function whatsappAlert(options: {
       (deal) =>
         `• ${deal.rawAddress || deal.city} · ${formatLandArea(deal.areaSqm)} · ${formatILS(
           deal.askingPrice,
-        )}\n  ${dealUrl(siteUrl, deal.id)}`,
+        )}\n  ${dateLine(deal).label}: ${dateLine(deal).date}\n  ${dealUrl(siteUrl, deal.id)}`,
     )
     .join("\n");
 

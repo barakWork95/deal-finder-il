@@ -1,4 +1,5 @@
 import type { Alert, Deal } from "./types";
+import { matchesPhase, tenderPhase } from "./tender-phase";
 
 /**
  * Does this tender satisfy an alert's filters?
@@ -8,8 +9,9 @@ import type { Alert, Deal } from "./types";
  * "X מכרזים תואמים" count on the card would contradict what the user just saw.
  * An unset filter matches everything.
  */
-export function matchesAlert(deal: Deal, alert: Alert): boolean {
+export function matchesAlert(deal: Deal, alert: Alert, now?: Date): boolean {
   const f = alert.filters;
+  if (f.phases?.length && !matchesPhase(tenderPhase(deal, now), f.phases)) return false;
   if (f.cities?.length && !f.cities.includes(deal.city)) return false;
   if (f.maxPrice != null && deal.askingPrice > f.maxPrice) return false;
   if (f.minPrice != null && deal.askingPrice < f.minPrice) return false;
@@ -21,7 +23,11 @@ export function matchesAlert(deal: Deal, alert: Alert): boolean {
 }
 
 export function countMatches(deals: Deal[], alert: Alert): number {
+  // One reading of the clock for the whole list: with a phase filter in play,
+  // two deals evaluated either side of midnight could otherwise be judged
+  // against different "todays".
+  const now = new Date();
   let n = 0;
-  for (const d of deals) if (matchesAlert(d, alert)) n++;
+  for (const d of deals) if (matchesAlert(d, alert, now)) n++;
   return n;
 }

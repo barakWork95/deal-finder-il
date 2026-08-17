@@ -88,9 +88,23 @@ const YEUD = {
   99: ["מעורב", "מתחם להשבחה"], // אחר
 };
 
-function scoreOf({ discountPct, daysLeft, zoning, hasAppraisal }) {
+function scoreOf({ discountPct, daysToAction, notStarted, zoning, hasAppraisal }) {
   const discountScore = Math.max(0, Math.min(55, discountPct * 2.4));
-  const urgency = daysLeft == null ? 6 : daysLeft <= 5 ? 18 : daysLeft <= 14 ? 12 : 8;
+  // Urgency reads the date the bidder can actually act on. For a tender that
+  // has not opened, "5 days" means five days until it opens — genuinely worth
+  // surfacing (there is time to prepare), but not the scramble that five days
+  // to a *deadline* deserves, so it tops out lower.
+  const urgency = notStarted
+    ? daysToAction != null && daysToAction <= 14
+      ? 12
+      : 8
+    : daysToAction == null
+      ? 6
+      : daysToAction <= 5
+        ? 18
+        : daysToAction <= 14
+          ? 12
+          : 8;
   const typeBoost = 10; // every RMI tender is a genuine land tender
   const upside = zoning === "חקלאי" || zoning === "מעורב" ? 8 : 0;
   const confidence = hasAppraisal ? 6 : 0; // real שומה beats a guess
@@ -161,6 +175,17 @@ async function main() {
     const [zoning, propertyType] = YEUD[t.KodYeudMichraz] ?? ["מעורב", "מתחם להשבחה"];
     const deadline = t.SgiraDate ? new Date(t.SgiraDate) : null;
     const daysLeft = deadline ? Math.ceil((deadline.getTime() - now) / 864e5) : null;
+    // PtichaDate is when bidding OPENS. A tender published but not yet open is
+    // "טרם החל" — רמ"י has no such status code, it is status 1 (מפורסם) with
+    // this date still in the future. Roughly half of the live feed is in that
+    // state, and until now they were indistinguishable from biddable tenders.
+    const opensAt = t.PtichaDate ? new Date(t.PtichaDate) : null;
+    const notStarted = Boolean(opensAt && opensAt.getTime() > now);
+    // Days until the tender can actually be acted on: the opening date while it
+    // is still closed, the deadline once it is open.
+    const daysToAction = notStarted
+      ? Math.ceil((opensAt.getTime() - now) / 864e5)
+      : daysLeft;
     const tikList = Array.isArray(detail?.Tik) && detail.Tik.length ? detail.Tik : [null];
 
     for (const [k, tik] of tikList.entries()) {
@@ -197,7 +222,11 @@ async function main() {
 
       const badges = [];
       if (discountPct > 0) badges.push("below_average");
-      if (daysLeft != null && daysLeft <= 7) badges.push("deadline_soon");
+      // "זמן קצר להגשה" only means something once submission is open — on a
+      // tender that has not started it would rush people towards a form they
+      // cannot fill in yet.
+      if (notStarted) badges.push("not_started");
+      else if (daysLeft != null && daysLeft <= 7) badges.push("deadline_soon");
       if (zoning === "חקלאי" || zoning === "מעורב") badges.push("rezoning_potential");
 
       const id = `rami-${t.MichrazID}-${k}`;
@@ -206,7 +235,8 @@ async function main() {
           (id, source_id, source_ref, deal_type, status, raw_address, city, street,
            neighborhood, gush, helka, property_type, zoning, building_rights, area_sqm,
            min_bid, development_costs,
-           asking_price, submission_deadline, est_market_value, discount_pct, deal_score,
+           asking_price, submission_deadline, submission_opens_at, source_status,
+           est_market_value, discount_pct, deal_score,
            badges, raw_document_url, fingerprint, first_seen_at, last_updated_at)
         VALUES (
           ${id}, ${sourceId}, ${t.MichrazName}, 'rami_tender', 'active',
@@ -214,8 +244,9 @@ async function main() {
           ${city}, ${(t.Shchuna || "").trim() || city}, ${(t.Shchuna || "").trim() || null},
           ${gh?.Gush ?? null}, ${gh?.Helka ?? null}, ${propertyType}, ${zoning}, ${rights},
           ${areaSqm}, ${minBid}, ${development},
-          ${askingPrice}, ${deadline}, ${estMarketValue}, ${discountPct},
-          ${scoreOf({ discountPct, daysLeft, zoning, hasAppraisal: appraisal > 0 })},
+          ${askingPrice}, ${deadline}, ${opensAt}, ${t.StatusMichraz ?? null},
+          ${estMarketValue}, ${discountPct},
+          ${scoreOf({ discountPct, daysToAction, notStarted, zoning, hasAppraisal: appraisal > 0 })},
           ${badges}, ${`${BASE}/#/michraz/${t.MichrazID}`}, ${id}, now(), now()
         )
         ON CONFLICT (id) DO UPDATE SET
@@ -224,6 +255,11 @@ async function main() {
           discount_pct = EXCLUDED.discount_pct,
           deal_score = EXCLUDED.deal_score,
           submission_deadline = EXCLUDED.submission_deadline,
+          -- Re-ingest is how a tender crosses from טרם החל to פתוח: רמ"י moves
+          -- StatusMichraz 1 → 2, and both of these have to follow or the feed
+          -- keeps calling an open tender "not started".
+          submission_opens_at = EXCLUDED.submission_opens_at,
+          source_status = EXCLUDED.source_status,
           badges = EXCLUDED.badges,
           last_updated_at = now()`;
       plots++;

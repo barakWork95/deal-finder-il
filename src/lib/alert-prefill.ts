@@ -1,4 +1,5 @@
-import type { DealType, Zoning } from "./types";
+import type { DealType, TenderPhase, Zoning } from "./types";
+import { FILTERABLE_PHASES } from "./tender-phase";
 
 /**
  * Carries the feed's active filters into the alert builder through the URL, so
@@ -14,6 +15,7 @@ export type AlertPrefill = {
   minScore?: number;
   types?: DealType[];
   zonings?: Zoning[];
+  phases?: TenderPhase[];
 };
 
 const DEAL_TYPES: DealType[] = [
@@ -63,6 +65,7 @@ export function buildAlertHref(prefill: AlertPrefill): string {
   if (prefill.minScore) params.set("minScore", String(Math.round(prefill.minScore)));
   if (prefill.types?.length) params.set("types", prefill.types.join(","));
   if (prefill.zonings?.length) params.set("zonings", prefill.zonings.join(","));
+  if (prefill.phases?.length) params.set("phases", prefill.phases.join(","));
   return `/alerts?${params}`;
 }
 
@@ -88,7 +91,12 @@ export function parseAlertPrefill(params: RawParams): AlertPrefill {
     ?.split(",")
     .filter((z): z is Zoning => ZONINGS.includes(z as Zoning));
 
+  const phases = first(params.phases)
+    ?.split(",")
+    .filter((p): p is TenderPhase => FILTERABLE_PHASES.includes(p as TenderPhase));
+
   return {
+    phases: phases?.length ? phases : undefined,
     city: first(params.city) || undefined,
     maxPrice: num(params.maxPrice, 500_000, 60_000_000),
     minDiscount: num(params.minDiscount, 0, 60),
@@ -100,6 +108,12 @@ export function parseAlertPrefill(params: RawParams): AlertPrefill {
 
 export function hasPrefill(p: AlertPrefill): boolean {
   return Boolean(
-    p.city || p.maxPrice != null || p.minDiscount || p.minScore || p.types?.length || p.zonings?.length,
+    p.city ||
+      p.maxPrice != null ||
+      p.minDiscount ||
+      p.minScore ||
+      p.types?.length ||
+      p.zonings?.length ||
+      p.phases?.length,
   );
 }

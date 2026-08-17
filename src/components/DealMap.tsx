@@ -6,7 +6,8 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { ArrowLeft, Crosshair, Gavel, MapPin, X } from "lucide-react";
 import type { Deal } from "@/lib/types";
-import { deadlineLabel, formatILS, formatLandArea } from "@/lib/format";
+import { formatILS, formatLandArea } from "@/lib/format";
+import { submissionInfo } from "@/lib/tender-phase";
 import { DealTypeChip, DiscountTag, ScoreChip } from "@/components/ui";
 import {
   ISRAEL_CENTER,
@@ -410,7 +411,7 @@ function SelectionPanel({ cluster, onClose }: { cluster: Cluster; onClose: () =>
               )}
               <div className="mt-1.5 flex items-center justify-between gap-2">
                 <DealTypeChip type={d.dealType} />
-                <span className="text-[11px] text-faint">{deadlineLabel(d.submissionDeadline)}</span>
+                <span className="text-[11px] text-faint">{submissionInfo(d).label}</span>
               </div>
             </div>
             <ArrowLeft
