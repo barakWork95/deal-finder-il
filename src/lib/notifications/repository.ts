@@ -51,7 +51,12 @@ export async function upsertContact(clerkUserId: string, input: ContactInput): P
   const clearEmail = input.email != null && input.email.trim() === "";
 
   const phone = input.phone ? toE164(input.phone) : null;
-  const email = input.email?.trim() || null;
+  // Lower-cased on the way in, the same way the phone is normalised to E.164.
+  // Mail domains treat the local part case-insensitively but providers compare
+  // the string: Resend's test mode rejected "Barackv95@gmail.com" as a
+  // different recipient from the account's "barackv95@gmail.com". It also
+  // stops the same person arriving twice under two spellings.
+  const email = input.email?.trim().toLowerCase() || null;
   const fullName = input.fullName?.trim() || null;
   const optIn = input.whatsappOptIn ?? Boolean(phone);
 
@@ -115,9 +120,10 @@ export async function setLastDigestAt(clerkUserId: string, at: Date): Promise<vo
  */
 export async function ensureContact(clerkUserId: string, email?: string): Promise<Recipient | null> {
   if (!hasDb) return null;
+  const normalised = email?.trim().toLowerCase() || null; // see upsertContact
   await sql`
     INSERT INTO user_contacts (clerk_user_id, email)
-    VALUES (${clerkUserId}, ${email ?? null})
+    VALUES (${clerkUserId}, ${normalised})
     ON CONFLICT (clerk_user_id) DO UPDATE SET
       email = COALESCE(user_contacts.email, EXCLUDED.email)`;
   return getContact(clerkUserId);
