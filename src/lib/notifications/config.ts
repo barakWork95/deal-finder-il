@@ -197,6 +197,14 @@ export function notificationStatus() {
   return {
     enabled: notificationSettings.enabled,
     email: email ? "resend" : "not_configured",
+    /**
+     * The sender address, echoed back. It is not a secret — it rides in the
+     * headers of every message we send — and without it the only way to tell
+     * whether a NOTIFY_EMAIL_FROM change reached the running build is to
+     * attempt a send and read the failure. That cost three redeploys and three
+     * manual ledger deletions when Resend rejected an unverified domain.
+     */
+    emailFrom: email?.from ?? null,
     whatsapp: whatsapp ? whatsapp.provider : "not_configured",
     /** With nothing configured, every run is a dry run whether asked or not. */
     canSend: notificationSettings.enabled && Boolean(email || whatsapp),
