@@ -2,7 +2,8 @@ import "server-only";
 import { clerkClient } from "@clerk/nextjs/server";
 import { isAuthConfigured } from "@/lib/auth";
 import { matchesAlert } from "@/lib/alert-match";
-import { listDealsSince } from "@/lib/repository";
+import { tenderPhase } from "@/lib/tender-phase";
+import { listDealsSince, listDealsOpeningWithin } from "@/lib/repository";
 import type { Alert, AlertChannel, Deal } from "@/lib/types";
 import { notificationSettings, notificationStatus } from "./config";
 import { sendEmail } from "./email";
@@ -18,7 +19,14 @@ import {
   type Recipient,
   type Tier,
 } from "./repository";
-import { digestEmail, instantEmail, whatsappAlert, type MessageDeal } from "./templates";
+import {
+  digestEmail,
+  instantEmail,
+  openingEmail,
+  whatsappAlert,
+  whatsappOpening,
+  type MessageDeal,
+} from "./templates";
 import type { SendOutcome } from "./types";
 import { sendWhatsApp } from "./whatsapp";
 
@@ -46,7 +54,7 @@ import { sendWhatsApp } from "./whatsapp";
  *      ever disagreed, the product would be lying about its own filters.
  */
 
-export type WorkerMode = "instant" | "digest";
+export type WorkerMode = "instant" | "digest" | "opening";
 
 export type WorkerSummary = {
   mode: WorkerMode;
@@ -113,12 +121,23 @@ export async function runNotificationWorker(options: WorkerOptions): Promise<Wor
   };
 
   try {
-    const lookbackHours =
-      mode === "instant"
-        ? notificationSettings.instantLookbackHours
-        : notificationSettings.digestLookbackHours;
-
-    const deals = await listDealsSince(new Date(now.getTime() - lookbackHours * HOUR_MS));
+    // "opening" does not look backwards at all: its candidates are tenders
+    // whose bidding window starts soon, whenever we first saw them.
+    const deals =
+      mode === "opening"
+        ? await listDealsOpeningWithin(
+            now,
+            new Date(now.getTime() + notificationSettings.openingLeadHours * HOUR_MS),
+          )
+        : await listDealsSince(
+            new Date(
+              now.getTime() -
+                (mode === "instant"
+                  ? notificationSettings.instantLookbackHours
+                  : notificationSettings.digestLookbackHours) *
+                  HOUR_MS,
+            ),
+          );
     summary.candidates = deals.length;
 
     const recipients = await listRecipients();
@@ -141,7 +160,9 @@ export async function runNotificationWorker(options: WorkerOptions): Promise<Wor
       const handled =
         mode === "instant"
           ? await runInstantFor(recipient, tier, deals, dryRun, summary)
-          : await runDigestFor(recipient, tier, deals, now, dryRun, summary);
+          : mode === "opening"
+            ? await runOpeningFor(recipient, tier, deals, now, dryRun, summary)
+            : await runDigestFor(recipient, tier, deals, now, dryRun, summary);
 
       if (handled) summary.recipients += 1;
     }
@@ -201,6 +222,84 @@ async function runInstantFor(
           channel === "email"
             ? buildInstantEmail(alert, batch, remainder, recipient)
             : buildWhatsApp(alert, batch, remainder),
+      });
+    }
+  }
+
+  return touched;
+}
+
+// ── Opening (a tender you already know about becomes biddable) ──
+
+/**
+ * The second message a tender may earn: bidding is about to open.
+ *
+ * Half the feed is טרם החל, so the discovery alert often lands weeks before
+ * anyone can act on it. This is the nudge at the moment they can — and the
+ * only place in the engine that deliberately messages a tender twice, which
+ * is why the ledger key carries a reason (migration 014). Two messages
+ * maximum: a repeated run still cannot send either again.
+ *
+ * PRO only, and only for instant alerts. Timeliness is what the paid tier
+ * sells, and a free account still meets these tenders in the daily digest.
+ */
+async function runOpeningFor(
+  recipient: Recipient,
+  tier: Tier,
+  deals: Deal[],
+  now: Date,
+  dryRun: boolean,
+  summary: WorkerSummary,
+): Promise<boolean> {
+  if (tier !== "pro") return false;
+
+  const alerts = recipient.alerts.filter((alert) => alert.frequency === "instant");
+  if (alerts.length === 0) return false;
+
+  let touched = false;
+
+  for (const alert of alerts) {
+    // Still not_started at this instant — the candidate query already bounded
+    // the window, this guards the edge where one crossed while the run was in
+    // flight and has therefore become an ordinary open tender.
+    const matches = deals.filter(
+      (deal) => tenderPhase(deal, now) === "not_started" && matchesAlert(deal, alert, now),
+    );
+    if (matches.length === 0) continue;
+    summary.matched += matches.length;
+    touched = true;
+
+    for (const { channel, to } of resolveChannels(alert, recipient, tier)) {
+      await deliver({
+        recipient,
+        alert,
+        channel,
+        to,
+        reason: "opening",
+        deals: matches,
+        dryRun,
+        summary,
+        build: (batch, remainder) =>
+          channel === "email"
+            ? {
+                kind: "email",
+                ...openingEmail({
+                  alertName: alert.name,
+                  deals: batch.map(toMessageDeal),
+                  remainder,
+                  siteUrl: notificationSettings.siteUrl,
+                  unsubscribeUrl: unsubscribeUrl(recipient),
+                }),
+              }
+            : {
+                kind: "whatsapp",
+                ...whatsappOpening({
+                  alertName: alert.name,
+                  deals: batch.map(toMessageDeal),
+                  remainder,
+                  siteUrl: notificationSettings.siteUrl,
+                }),
+              },
       });
     }
   }
@@ -363,12 +462,15 @@ async function deliver(params: {
   channel: AlertChannel;
   /** Address resolved by resolveChannels — an email or an E.164 number. */
   to: string;
+  /** Which of the two messages a tender may earn; part of the ledger key. */
+  reason?: "new" | "opening";
   deals: Deal[];
   dryRun: boolean;
   summary: WorkerSummary;
   build: (batch: Deal[], remainder: number) => BuiltMessage;
 }): Promise<void> {
   const { recipient, alert, channel, to, deals, dryRun, summary, build } = params;
+  const reason = params.reason ?? "new";
 
   const dealIds = dryRun
     ? deals.map((deal) => deal.id)
@@ -378,6 +480,7 @@ async function deliver(params: {
         channel,
         dealIds: deals.map((deal) => deal.id),
         maxAttempts: notificationSettings.maxAttempts,
+        reason,
       });
 
   if (dealIds.length === 0) return;
@@ -417,10 +520,10 @@ async function deliver(params: {
 
   if (outcome.status === "skipped") {
     // Not sent for a reason that may not hold next run — give the claim back.
-    await releaseDeliveries({ alertId: alert.id, channel, dealIds });
+    await releaseDeliveries({ alertId: alert.id, channel, dealIds, reason });
     summary.skipped += 1;
   } else {
-    await markDeliveries({ alertId: alert.id, channel, dealIds, outcome });
+    await markDeliveries({ alertId: alert.id, channel, dealIds, outcome, reason });
     if (outcome.status === "sent") summary.sent += 1;
     else summary.failed += 1;
   }

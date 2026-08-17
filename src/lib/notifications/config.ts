@@ -120,6 +120,14 @@ export const notificationSettings = {
   get freeDelayHours() {
     return int("NOTIFY_FREE_DELAY_HOURS", 24);
   },
+  /**
+   * How far ahead of a tender opening to send the "it opens soon" message.
+   * 36h so a morning run reaches someone the day before, without firing so
+   * early that "נפתח להגשה" is untrue for days.
+   */
+  get openingLeadHours() {
+    return int("NOTIFY_OPENING_LEAD_HOURS", 36);
+  },
   /** Most tenders in one message before it becomes "ועוד N". */
   get maxItemsPerMessage() {
     return int("NOTIFY_MAX_ITEMS_PER_MESSAGE", 5);
@@ -197,6 +205,14 @@ export function notificationStatus() {
   return {
     enabled: notificationSettings.enabled,
     email: email ? "resend" : "not_configured",
+    /**
+     * The sender address, echoed back. It is not a secret — it rides in the
+     * headers of every message we send — and without it the only way to tell
+     * whether a NOTIFY_EMAIL_FROM change reached the running build is to
+     * attempt a send and read the failure. That cost three redeploys and three
+     * manual ledger deletions when Resend rejected an unverified domain.
+     */
+    emailFrom: email?.from ?? null,
     whatsapp: whatsapp ? whatsapp.provider : "not_configured",
     /** With nothing configured, every run is a dry run whether asked or not. */
     canSend: notificationSettings.enabled && Boolean(email || whatsapp),

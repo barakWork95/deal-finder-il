@@ -100,6 +100,28 @@ export async function listDealsSince(since: Date): Promise<Deal[]> {
   );
 }
 
+/**
+ * Active tenders whose bidding opens between `from` and `until`.
+ *
+ * The "it opens tomorrow" alert's candidates. Unlike the other two modes this
+ * ignores first_seen_at entirely — a tender ingested weeks ago is exactly the
+ * one worth a nudge on the morning it becomes biddable.
+ */
+export async function listDealsOpeningWithin(from: Date, until: Date): Promise<Deal[]> {
+  if (!hasDb) return [];
+  const rows = await sql`
+    SELECT d.*, s.name AS source_name
+    FROM deals d LEFT JOIN sources s ON s.id = d.source_id
+    WHERE d.status = 'active'
+      AND d.submission_opens_at IS NOT NULL
+      AND d.submission_opens_at > ${from}
+      AND d.submission_opens_at <= ${until}
+    ORDER BY d.submission_opens_at`;
+  return rows.map((r) =>
+    mapDeal(r, [], r.area_sqm ? Math.round(num(r.est_market_value) / num(r.area_sqm)) : 0),
+  );
+}
+
 export async function getDealById(id: string): Promise<Deal | undefined> {
   if (!hasDb) return getMockDeal(id);
   const [row] = await sql`
