@@ -172,3 +172,38 @@ replaced by a spam report.
 - No admin view over `notification_runs`; `?status=1` is the whole story.
 - Quiet hours / per-alert send caps do not exist. A broad alert on a heavy
   ingestion day can produce several WhatsApp messages in an hour.
+
+## The pipeline that feeds this
+
+`.github/workflows/pipeline.yml` runs `ingest → sync-phase → geocode →
+refresh-premium → notify` on GitHub-hosted runners. A reachability probe
+(`.github/workflows/rami-reachability.yml`, local control `npm run probe:rami`)
+confirmed a Wyoming runner pulls all 10,612 tenders on the first attempt —
+there is no geo-fence, so none of this needs an Israeli IP.
+
+**Two schedules.** Hourly is incremental: the search endpoint lists every
+tender in one call, so only genuinely new or status-changed ones cost a
+per-tender detail fetch. Nightly (02:40 UTC) is a full pass that refreshes
+prices, deadlines and appraisals, then the winning-premium signal. A full pass
+is ~470 detail calls; hourly that would be 11,000 requests a day at a
+government portal.
+
+**The portal flaps on a minutes timescale** — 404 → 200 → 404 → 200 inside ten
+minutes, identically from curl and Node, cookie or not. It is not an outage to
+wait out, so every call goes through `db/rami-http.mjs`, which retries with
+exponential backoff and jitter. The flap signature is an **HTML body**, not a
+status code: during a window the API answers 404 with the SPA error page, so
+anything that should be JSON and starts with `<` is retried, while a real 4xx
+with a JSON body is not. Adding this took a run from **244 failed detail
+fetches to 0**.
+
+**`rami_tenders_seen` (migration 013) is what keeps the hourly run cheap.**
+Most active tenders produce no `deals` rows at all — apartment tenders, no
+minimum price, aggregate areas the parser rejects — so "is it in `deals`?" would
+mark ~376 tenders permanently new and re-fetch them every hour. The table
+records the examination, including `plots = 0`.
+
+Secrets: `DATABASE_URL`, `NOTIFY_CRON_URL`, `NOTIFY_CRON_SECRET`. Missing ones
+make steps skip rather than fail — a half-configured pipeline should be quiet,
+not a red X every hour. The old standalone `notifications.yml` was folded in as
+this workflow's notify step.

@@ -1,0 +1,148 @@
+name: Data pipeline
+
+# ingest → sync-phase → geocode → refresh-premium → notify
+#
+# This is what makes the product run without anyone at a keyboard. A tender
+# alert is worth having only if it arrives while the tender is still worth
+# acting on, and until now every step was a command someone had to type.
+#
+# TWO SCHEDULES, DELIBERATELY.
+#   hourly  — incremental. The search endpoint returns all ~10,600 tenders in
+#             one call, so detecting what is new is cheap; only genuinely new
+#             or status-changed tenders get the expensive per-tender detail
+#             fetch (usually a handful). Then phases, coordinates for whatever
+#             arrived, and the instant alert run.
+#   nightly — full. Re-fetches details for every active tender so prices,
+#             deadlines and appraisals stay current, then refreshes the
+#             winning-premium signal.
+#
+# A full pass is ~470 detail calls. Running that hourly would be 11,000
+# requests a day at a government portal — rude, and a good way to earn the
+# block the reachability probe proved does not exist. Hence the split.
+#
+# Runs from GitHub-hosted runners, which the probe confirmed can reach רמ"י
+# (a Wyoming runner pulled all 10,612 tenders first try — there is no geo-fence).
+#
+# Secrets:
+#   DATABASE_URL        Supabase pooled connection (:6543)
+#   NOTIFY_CRON_URL     https://<domain>/api/cron/notifications
+#   NOTIFY_CRON_SECRET  same value as CRON_SECRET on Vercel
+# Missing secrets make steps skip rather than fail — a half-configured
+# pipeline should be quiet, not a red X every hour.
+
+on:
+  schedule:
+    - cron: "20 * * * *" # hourly, off the hour so it does not pile onto :00 load
+    - cron: "40 2 * * *" # nightly full refresh (05:40 Israel in summer)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "incremental | full"
+        required: false
+        default: incremental
+      notify:
+        description: "Send notifications at the end"
+        type: boolean
+        required: false
+        default: true
+      dry_run_notify:
+        description: "Match and report without sending"
+        type: boolean
+        required: false
+        default: false
+
+# Never let two runs touch the database at once: the nightly full pass and an
+# hourly one overlapping would double the load on the portal for no benefit.
+concurrency:
+  group: data-pipeline
+  cancel-in-progress: false
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      # cron does not carry inputs, so the nightly schedule is identified by
+      # the cron expression it fired from.
+      MODE: ${{ inputs.mode || (github.event.schedule == '40 2 * * *' && 'full' || 'incremental') }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check configuration
+        id: config
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "DATABASE_URL secret is not set — skipping every database step."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "mode: $MODE"
+
+      - name: Ingest tenders
+        if: steps.config.outputs.configured == 'true'
+        run: |
+          if [ "$MODE" = "full" ]; then
+            npm run db:ingest:rami
+          else
+            npm run db:ingest:rami -- --new-only
+          fi
+
+      # Phase data comes from the search endpoint, so this repairs anything the
+      # detail-dependent ingest could not write. Cheap: one bulk statement.
+      - name: Sync tender phases
+        if: steps.config.outputs.configured == 'true'
+        run: npm run db:sync-phase
+
+      # Without this, new tenders never appear on the map.
+      - name: Geocode new tenders
+        if: steps.config.outputs.configured == 'true'
+        run: npm run db:geocode
+
+      - name: Refresh winning-premium signal
+        if: steps.config.outputs.configured == 'true' && env.MODE == 'full'
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          fi
+          npm run db:refresh-premium
+
+      - name: Send notifications
+        if: inputs.notify != false
+        env:
+          URL: ${{ secrets.NOTIFY_CRON_URL }}
+          SECRET: ${{ secrets.NOTIFY_CRON_SECRET }}
+          DRY: ${{ inputs.dry_run_notify && '1' || '0' }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$SECRET" ]; then
+            echo "NOTIFY_CRON_URL / NOTIFY_CRON_SECRET not set — skipping notifications."
+            exit 0
+          fi
+          code=$(curl -sS -o /tmp/notify.json -w '%{http_code}' \
+            -X POST "$URL?mode=instant&dryRun=$DRY" \
+            -H "Authorization: Bearer $SECRET")
+          echo "HTTP $code"
+          cat /tmp/notify.json; echo
+          [ "$code" = "200" ]
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Data pipeline — \`$MODE\`"
+            echo
+            echo "| step | result |"
+            echo "| --- | --- |"
+            echo "| configured | ${{ steps.config.outputs.configured }} |"
+            echo "| ingest | ${{ steps.config.outputs.configured == 'true' && 'ran' || 'skipped' }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
