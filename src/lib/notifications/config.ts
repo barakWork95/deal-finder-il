@@ -155,6 +155,41 @@ export const notificationSettings = {
   },
 };
 
+/**
+ * Which variables a channel is still waiting on.
+ *
+ * Names only — never values. "not_configured" on its own turns setup into a
+ * guessing game across a dozen variables and a redeploy per guess, and the
+ * name of a variable you already know you set is not a secret. The one value
+ * echoed back is WHATSAPP_PROVIDER, because "you typed Green API, this wants
+ * green" is the whole answer and that value is a fixed keyword, not a
+ * credential.
+ */
+function missingVars(): string[] {
+  const missing: string[] = [];
+
+  if (!notificationSettings.enabled) missing.push("NOTIFICATIONS_ENABLED (must be true/1)");
+  if (!str("RESEND_API_KEY")) missing.push("RESEND_API_KEY");
+  if (!str("NOTIFY_EMAIL_FROM")) missing.push("NOTIFY_EMAIL_FROM");
+
+  const provider = str("WHATSAPP_PROVIDER")?.toLowerCase();
+  if (!provider) {
+    missing.push('WHATSAPP_PROVIDER (set to "green" or "twilio")');
+  } else if (provider === "green") {
+    if (!str("GREEN_API_INSTANCE_ID")) missing.push("GREEN_API_INSTANCE_ID");
+    if (!str("GREEN_API_TOKEN")) missing.push("GREEN_API_TOKEN");
+  } else if (provider === "twilio") {
+    if (!str("TWILIO_ACCOUNT_SID")) missing.push("TWILIO_ACCOUNT_SID");
+    if (!str("TWILIO_AUTH_TOKEN")) missing.push("TWILIO_AUTH_TOKEN");
+    if (!str("TWILIO_WHATSAPP_FROM")) missing.push("TWILIO_WHATSAPP_FROM");
+  } else {
+    missing.push(`WHATSAPP_PROVIDER is "${provider}" — expected "green" or "twilio"`);
+  }
+
+  if (!str("CRON_SECRET")) missing.push("CRON_SECRET");
+  return missing;
+}
+
 /** Summary for the health endpoint and the run log — never includes secrets. */
 export function notificationStatus() {
   const email = emailConfig();
@@ -165,5 +200,12 @@ export function notificationStatus() {
     whatsapp: whatsapp ? whatsapp.provider : "not_configured",
     /** With nothing configured, every run is a dry run whether asked or not. */
     canSend: notificationSettings.enabled && Boolean(email || whatsapp),
+    /** Exactly what is still needed, so setup is not a guess-and-redeploy loop. */
+    missing: missingVars(),
+    /**
+     * Which commit answered. Env changes only reach a *new* deployment, so
+     * "I set it and it still says missing" is usually "the old build replied".
+     */
+    commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local",
   };
 }
