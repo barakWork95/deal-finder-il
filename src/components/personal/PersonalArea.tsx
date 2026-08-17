@@ -27,6 +27,7 @@ export function PersonalArea({
   initialTab = "alerts",
   prefill = {},
   account,
+  delivery,
 }: {
   deals: Deal[];
   cities: string[];
@@ -34,6 +35,8 @@ export function PersonalArea({
   prefill?: AlertPrefill;
   /** The signed-in user's rows, already fetched server-side. */
   account?: UserData;
+  /** Which notification channels the server can send on — decided server-side. */
+  delivery?: { email: boolean; whatsapp: boolean };
 }) {
   const [tab, setTab] = useState<TabKey>(initialTab);
 
@@ -124,7 +127,13 @@ export function PersonalArea({
           {/* `key` restarts the entrance animation on every tab switch. */}
           <div key={tab} className="panel-in">
           {tab === "alerts" && (
-              <AlertsPanel deals={deals} cities={cities} prefill={prefill} account={account} />
+              <AlertsPanel
+                deals={deals}
+                cities={cities}
+                prefill={prefill}
+                account={account}
+                delivery={delivery}
+              />
             )}
           {tab === "saved" && <SavedDealsPanel deals={deals} account={account} />}
           {tab === "account" && <AccountPanel />}

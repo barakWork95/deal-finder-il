@@ -1,0 +1,51 @@
+name: Notification worker (instant)
+
+# Why this exists instead of a second Vercel cron:
+# Vercel's Hobby plan runs cron jobs once per day, which is fine for the
+# digest but useless for "instant" PRO alerts. GitHub Actions has no such
+# limit, so the hourly run is triggered from here. On a Vercel Pro plan this
+# workflow can be deleted and the schedule moved into vercel.json as
+# { "path": "/api/cron/notifications?mode=instant", "schedule": "0 * * * *" }.
+#
+# Needs two repository secrets. Without them the job exits cleanly rather than
+# failing every hour in the Actions tab:
+#   NOTIFY_CRON_URL     https://<production-domain>/api/cron/notifications
+#   NOTIFY_CRON_SECRET  the same value as CRON_SECRET on Vercel
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "instant | digest | both"
+        required: false
+        default: "instant"
+      dryRun:
+        description: "Match and report without sending"
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the worker
+        env:
+          URL: ${{ secrets.NOTIFY_CRON_URL }}
+          SECRET: ${{ secrets.NOTIFY_CRON_SECRET }}
+          MODE: ${{ inputs.mode || 'instant' }}
+          DRY_RUN: ${{ inputs.dryRun && '1' || '0' }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$SECRET" ]; then
+            echo "NOTIFY_CRON_URL / NOTIFY_CRON_SECRET not set — skipping."
+            exit 0
+          fi
+          response=$(curl -sS -o /tmp/body.json -w '%{http_code}' \
+            -X POST "$URL?mode=$MODE&dryRun=$DRY_RUN" \
+            -H "Authorization: Bearer $SECRET")
+          echo "HTTP $response"
+          cat /tmp/body.json
+          echo
+          [ "$response" = "200" ]

@@ -12,6 +12,7 @@ import {
   getUserData,
   type UserData,
 } from "@/lib/user-repository";
+import { upsertContact } from "@/lib/notifications/repository";
 
 /**
  * Mutations for a signed-in user's alerts and saved tenders.
@@ -88,6 +89,33 @@ export async function setDealSavedAction(dealId: string, saved: boolean): Promis
 
   await setDealSaved(userId, String(dealId).slice(0, 64), saved);
   revalidatePath("/alerts");
+  return { ok: true };
+}
+
+/**
+ * Contact details, mirrored from the account form into user_contacts.
+ *
+ * The browser copy stays where it was (localStorage, so guests keep working),
+ * but the sender runs on a server that cannot read it — the notification
+ * worker needs an address of its own. Email falls back to the verified one on
+ * the Clerk profile, so this is really about the phone number and about
+ * WhatsApp consent, which is why saving a number turns the opt-in on and
+ * clearing it turns it off.
+ */
+export async function saveContactAction(input: {
+  fullName?: string;
+  email?: string;
+  phone?: string;
+}): Promise<ActionResult> {
+  const userId = await currentUserId();
+  if (!userId) return { ok: false, reason: "unauthenticated" };
+
+  await upsertContact(userId, {
+    fullName: String(input.fullName ?? "").slice(0, 120),
+    email: String(input.email ?? "").slice(0, 254),
+    phone: String(input.phone ?? "").slice(0, 24),
+    whatsappOptIn: Boolean(input.phone),
+  });
   return { ok: true };
 }
 

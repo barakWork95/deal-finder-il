@@ -15,9 +15,22 @@ export const sql =
     ? postgres(process.env.DATABASE_URL, {
         // Supabase's transaction pooler (:6543) is pgbouncer in transaction
         // mode — it cannot hold named prepared statements across a pooled
-        // connection, and serverless wants a small pool.
-        max: 3,
+        // connection.
+        //
+        // `max` used to be 3, which deadlocked. A request that runs two
+        // queries with Promise.all holds two slots at once, so two concurrent
+        // signed-in page loads want four and the third connection is held by
+        // a request waiting for a fourth that will never come free. Nothing
+        // times out, so the pool stays wedged until the process restarts.
+        // Keep headroom above 2 × the queries any single request fans out to.
+        max: 10,
         idle_timeout: 20,
+        // A connection that has been alive this long is replaced rather than
+        // reused, so a socket the pooler quietly dropped cannot sit in the
+        // pool forever pretending to be usable.
+        max_lifetime: 60 * 30,
+        // Never block a render waiting for a socket that is not coming.
+        connect_timeout: 10,
         prepare: false,
         onnotice: () => {},
       })

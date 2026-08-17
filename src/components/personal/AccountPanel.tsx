@@ -5,6 +5,8 @@ import { Check, Mail, MessageCircle, Trash2, User } from "lucide-react";
 import { clearLocalData, useProfile } from "@/lib/client-store";
 import { Field, IconInput } from "@/components/personal/controls";
 import { ClerkSecurityLink } from "@/components/personal/ClerkSecurityLink";
+import { useAuthState } from "@/components/AuthState";
+import { saveContactAction } from "@/app/actions/personal";
 
 /** Israeli mobile, with or without the leading zero / +972. */
 const PHONE_RE = /^(\+?972|0)?5\d{8}$/;
@@ -14,6 +16,7 @@ export function AccountPanel() {
   const [profile, setProfile] = useProfile();
   const [draft, setDraft] = useState(profile);
   const [saved, setSaved] = useState(false);
+  const { signedIn } = useAuthState();
 
   const emailError = draft.email !== "" && !EMAIL_RE.test(draft.email.trim());
   const phoneError = draft.phone !== "" && !PHONE_RE.test(draft.phone.replace(/[\s-]/g, ""));
@@ -24,12 +27,19 @@ export function AccountPanel() {
 
   function save() {
     if (emailError || phoneError) return;
-    setProfile({
+    const next = {
       fullName: draft.fullName.trim(),
       email: draft.email.trim(),
       phone: draft.phone.replace(/[\s-]/g, ""),
-    });
+    };
+    setProfile(next);
     setSaved(true);
+
+    // Signed in, the details also go to the account, because the sender runs
+    // on a server that cannot read this browser's localStorage. Failure is
+    // deliberately silent: the local copy is already saved, and the alerts
+    // notice below explains what a missing detail costs.
+    if (signedIn) void saveContactAction(next).catch(() => {});
   }
 
   return (
@@ -38,8 +48,9 @@ export function AccountPanel() {
 
       <div className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow)]">
         <p className="mb-4 text-xs text-muted">
-          הפרטים משמשים כיעד לשליחת ההתראות ונשמרים בדפדפן הזה בלבד — עדיין אין חשבונות מקוונים
-          במערכת.
+          {signedIn
+            ? "הפרטים משמשים כיעד לשליחת ההתראות ונשמרים בחשבון שלך. מספר הנייד נדרש להתראות WhatsApp; שמירת מספר מהווה אישור לקבלתן, ומחיקתו מפסיקה אותן."
+            : "הפרטים משמשים כיעד לשליחת ההתראות ונשמרים בדפדפן הזה בלבד. התחברות תשמור אותם בחשבון כדי שנוכל לשלוח בפועל."}
         </p>
 
         <div className="grid gap-4 sm:grid-cols-2">

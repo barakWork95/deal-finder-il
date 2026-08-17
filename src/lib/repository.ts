@@ -79,6 +79,25 @@ export async function listDeals(): Promise<Deal[]> {
   );
 }
 
+/**
+ * Active tenders first seen since `since` — the notification worker's input.
+ *
+ * `first_seen_at` is set by the ingestion upsert, so "new" means new to us,
+ * not newly published by רמ"י. Comps are not loaded: an alert message quotes
+ * the entry cost and the appraisal gap, both of which are on the row.
+ */
+export async function listDealsSince(since: Date): Promise<Deal[]> {
+  if (!hasDb) return [];
+  const rows = await sql`
+    SELECT d.*, s.name AS source_name
+    FROM deals d LEFT JOIN sources s ON s.id = d.source_id
+    WHERE d.status = 'active' AND d.first_seen_at >= ${since}
+    ORDER BY d.first_seen_at DESC`;
+  return rows.map((r) =>
+    mapDeal(r, [], r.area_sqm ? Math.round(num(r.est_market_value) / num(r.area_sqm)) : 0),
+  );
+}
+
 export async function getDealById(id: string): Promise<Deal | undefined> {
   if (!hasDb) return getMockDeal(id);
   const [row] = await sql`

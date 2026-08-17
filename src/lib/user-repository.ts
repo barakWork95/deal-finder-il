@@ -29,10 +29,15 @@ function mapAlert(row: Record<string, unknown>): Alert {
 export async function getUserData(clerkUserId: string): Promise<UserData> {
   if (!hasDb) return EMPTY;
 
-  const [alertRows, savedRows] = await Promise.all([
-    sql`SELECT * FROM user_alerts WHERE clerk_user_id = ${clerkUserId} ORDER BY created_at DESC`,
-    sql`SELECT deal_id FROM user_saved_deals WHERE clerk_user_id = ${clerkUserId} ORDER BY saved_at DESC`,
-  ]);
+  // Sequential, not Promise.all. Running them together makes one request hold
+  // two pooled connections at the same time, and a request that holds one
+  // connection while waiting for another is how a connection pool deadlocks:
+  // enough concurrent callers and every slot is held by someone waiting for a
+  // slot. Both queries are single-index lookups, so the saving was never real.
+  const alertRows =
+    await sql`SELECT * FROM user_alerts WHERE clerk_user_id = ${clerkUserId} ORDER BY created_at DESC`;
+  const savedRows =
+    await sql`SELECT deal_id FROM user_saved_deals WHERE clerk_user_id = ${clerkUserId} ORDER BY saved_at DESC`;
 
   return {
     alerts: alertRows.map(mapAlert),
