@@ -50,6 +50,11 @@ on:
         type: boolean
         required: false
         default: false
+      simulate_failure:
+        description: "Drill: fail a step on purpose to exercise the ops alert"
+        type: boolean
+        required: false
+        default: false
 
 # Never let two runs touch the database at once: the nightly full pass and an
 # hourly one overlapping would double the load on the portal for no benefit.
@@ -94,6 +99,14 @@ jobs:
       # silently sent nothing: notify is last, so every earlier failure used to
       # take the notifications with it. A stale-but-working alert beats
       # silence. The final step still fails the run, so nothing is hidden.
+      - name: Drill — deliberate failure
+        id: simulate
+        continue-on-error: true
+        if: inputs.simulate_failure == true
+        run: |
+          echo "Deliberate failure: exercising the ops-alert path end to end."
+          exit 1
+
       - name: Ingest tenders
         id: ingest
         continue-on-error: true
@@ -160,13 +173,14 @@ jobs:
           GEOCODE: ${{ steps.geocode.outcome }}
           PREMIUM: ${{ steps.premium.outcome }}
           NOTIFY: ${{ steps.notify.outcome }}
+          DRILL: ${{ steps.simulate.outcome }}
         run: |
           {
             echo "### Data pipeline — \`$MODE\`"
             echo
             echo "| step | outcome |"
             echo "| --- | --- |"
-            for pair in "ingest:$INGEST" "sync-phase:$SYNC" "geocode:$GEOCODE" \
+            for pair in "drill:$DRILL" "ingest:$INGEST" "sync-phase:$SYNC" "geocode:$GEOCODE" \
                         "refresh-premium:$PREMIUM" "notify:$NOTIFY"; do
               name=${pair%%:*}; outcome=${pair#*:}
               case "$outcome" in
@@ -180,7 +194,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           failed=""
-          for pair in "ingest:$INGEST" "sync-phase:$SYNC" "geocode:$GEOCODE" \
+          for pair in "drill:$DRILL" "ingest:$INGEST" "sync-phase:$SYNC" "geocode:$GEOCODE" \
                       "refresh-premium:$PREMIUM" "notify:$NOTIFY"; do
             if [ "${pair#*:}" = "failure" ]; then failed="$failed ${pair%%:*}"; fi
           done
@@ -204,6 +218,7 @@ jobs:
           GEOCODE: ${{ steps.geocode.outcome }}
           PREMIUM: ${{ steps.premium.outcome }}
           NOTIFY: ${{ steps.notify.outcome }}
+          DRILL: ${{ steps.simulate.outcome }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if [ -z "$URL" ] || [ -z "$SECRET" ]; then
@@ -212,7 +227,7 @@ jobs:
           fi
 
           failed=""
-          for pair in "ingest:$INGEST" "sync-phase:$SYNC" "geocode:$GEOCODE" \
+          for pair in "drill:$DRILL" "ingest:$INGEST" "sync-phase:$SYNC" "geocode:$GEOCODE" \
                       "refresh-premium:$PREMIUM" "notify:$NOTIFY"; do
             if [ "${pair#*:}" = "failure" ]; then failed="$failed ${pair%%:*}"; fi
           done
