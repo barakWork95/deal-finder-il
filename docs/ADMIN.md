@@ -32,18 +32,16 @@ control.
 dashboard's toggle is what sets it. `db/017_admin.sql` adds the provenance
 around it: `tier_source`, `tier_updated_at`, `tier_set_by`, `tier_note`.
 
-`NOTIFY_PRO_USER_IDS` is **deprecated**. It survives only as a one-way
-bootstrap (`syncLegacyProGrants`, called at the top of a non-dry notification
-run) so the changeover does not downgrade whoever it was carrying. It can never
-overrule the dashboard: the upsert skips any row whose `tier_source` is
-`'admin'`.
+Nothing in the environment can contradict it. PRO used to be granted by
+`NOTIFY_PRO_USER_IDS` — changeable only by a redeploy, invisible from inside
+the app, and silently at odds with the column every read already used. That
+variable, and the one-way bootstrap that carried its ids into the column, were
+removed once the dashboard listed the same people as PRO.
 
-To retire it completely:
-
-1. Open `/admin`, confirm the people listed as PRO are the ones you expect.
-2. Delete `NOTIFY_PRO_USER_IDS` from Vercel (all environments) and `.env.local`.
-3. Delete `notificationSettings.proUserIds` and `syncLegacyProGrants`, and the
-   two lines in `worker.ts` that call them.
+Rows granted that way still read `tier_source = 'legacy_env'` (shown as
+"מ-ENV (מיושן)"). That is accurate history, not a pending migration: the plan
+itself lives in `tier`, which nothing outside the dashboard writes. The label
+changes to "נקבע ידנית" the first time someone's plan is deliberately set.
 
 ## Product events
 

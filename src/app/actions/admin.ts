@@ -29,9 +29,9 @@ const id = (value: unknown, max = 64): string => String(value ?? "").trim().slic
 /**
  * Grants or revokes PRO.
  *
- * This is now the only thing that decides who is PRO: user_contacts.tier is the
- * source of truth, and NOTIFY_PRO_USER_IDS is a deprecated bootstrap that can
- * no longer overturn a decision made here (see syncLegacyProGrants).
+ * This is the only thing that decides who is PRO. user_contacts.tier is the
+ * source of truth and nothing in the environment can contradict it — the env
+ * var that used to grant PRO is gone.
  */
 export async function setUserTierAction(input: {
   clerkUserId: string;

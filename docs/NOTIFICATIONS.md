@@ -78,7 +78,6 @@ sent — which is how it should be tested first.
 | `NOTIFY_MAX_ITEMS_PER_MESSAGE` | `5` | Rest becomes "ועוד N". |
 | `NOTIFY_MAX_SENDS_PER_RUN` | `200` | Safety cap per invocation. |
 | `NOTIFY_MAX_ATTEMPTS` | `3` | Retries of a *retryable* failure. |
-| `NOTIFY_PRO_USER_IDS` | — | Comma-separated Clerk ids granted PRO by hand. Billing is not live, so this is the only way the instant path runs at all. |
 
 ## Tiering
 
@@ -165,11 +164,12 @@ replaced by a spam report.
 
 ## Not done yet (Step 2 candidates)
 
-- Tier comes from `user_contacts.tier` / `NOTIFY_PRO_USER_IDS`. Real billing
-  (PayPal) still has to write that column.
+- Tier comes from `user_contacts.tier`, set from the admin dashboard
+  (docs/ADMIN.md). Real billing (PayPal) still has to write that column.
 - `AlertsPanel` shows `triggeredThisMonth: 0` — the count is in the ledger now
   and could be read for real.
-- No admin view over `notification_runs`; `?status=1` is the whole story.
+- `notification_runs` and failed deliveries are on `/admin` now; `?status=1`
+  remains the check that needs no session.
 - Quiet hours / per-alert send caps do not exist. A broad alert on a heavy
   ingestion day can produce several WhatsApp messages in an hour.
 
