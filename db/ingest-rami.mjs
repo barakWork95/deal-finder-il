@@ -107,7 +107,7 @@ function scoreOf({ discountPct, daysToAction, notStarted, zoning, hasAppraisal }
 
 async function main() {
   console.log("→ warming session…");
-  await warmSession();
+  await warmSession({ onRetry: noteRetry });
 
   console.log("→ lookups…");
   const tables = await getJson(`${API}/GeneralTablesApi`, {}, { label: "GeneralTablesApi", onRetry: noteRetry });

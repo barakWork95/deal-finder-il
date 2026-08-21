@@ -89,7 +89,14 @@ jobs:
           fi
           echo "mode: $MODE"
 
+      # The data steps below are continue-on-error so that a flap in one does
+      # not suppress the alerts. A scheduled run failed at sync-phase and
+      # silently sent nothing: notify is last, so every earlier failure used to
+      # take the notifications with it. A stale-but-working alert beats
+      # silence. The final step still fails the run, so nothing is hidden.
       - name: Ingest tenders
+        id: ingest
+        continue-on-error: true
         if: steps.config.outputs.configured == 'true'
         run: |
           if [ "$MODE" = "full" ]; then
@@ -101,15 +108,21 @@ jobs:
       # Phase data comes from the search endpoint, so this repairs anything the
       # detail-dependent ingest could not write. Cheap: one bulk statement.
       - name: Sync tender phases
+        id: sync
+        continue-on-error: true
         if: steps.config.outputs.configured == 'true'
         run: npm run db:sync-phase
 
       # Without this, new tenders never appear on the map.
       - name: Geocode new tenders
+        id: geocode
+        continue-on-error: true
         if: steps.config.outputs.configured == 'true'
         run: npm run db:geocode
 
       - name: Refresh winning-premium signal
+        id: premium
+        continue-on-error: true
         if: steps.config.outputs.configured == 'true' && env.MODE == 'full'
         run: |
           if ! command -v psql >/dev/null; then
@@ -118,7 +131,8 @@ jobs:
           npm run db:refresh-premium
 
       - name: Send notifications
-        if: inputs.notify != false
+        id: notify
+        if: always() && inputs.notify != false
         env:
           URL: ${{ secrets.NOTIFY_CRON_URL }}
           SECRET: ${{ secrets.NOTIFY_CRON_SECRET }}
@@ -135,14 +149,43 @@ jobs:
           cat /tmp/notify.json; echo
           [ "$code" = "200" ]
 
+      # continue-on-error must not become "nobody notices". Every outcome is
+      # reported, and a failed data step still fails the run — after notify has
+      # had its chance.
       - name: Summary
         if: always()
+        env:
+          INGEST: ${{ steps.ingest.outcome }}
+          SYNC: ${{ steps.sync.outcome }}
+          GEOCODE: ${{ steps.geocode.outcome }}
+          PREMIUM: ${{ steps.premium.outcome }}
+          NOTIFY: ${{ steps.notify.outcome }}
         run: |
           {
             echo "### Data pipeline — \`$MODE\`"
             echo
-            echo "| step | result |"
+            echo "| step | outcome |"
             echo "| --- | --- |"
-            echo "| configured | ${{ steps.config.outputs.configured }} |"
-            echo "| ingest | ${{ steps.config.outputs.configured == 'true' && 'ran' || 'skipped' }} |"
+            for pair in "ingest:$INGEST" "sync-phase:$SYNC" "geocode:$GEOCODE" \
+                        "refresh-premium:$PREMIUM" "notify:$NOTIFY"; do
+              name=${pair%%:*}; outcome=${pair#*:}
+              case "$outcome" in
+                success) icon="✅" ;;
+                failure) icon="❌" ;;
+                skipped|"") icon="⏭️"; outcome="${outcome:-skipped}" ;;
+                *) icon="•" ;;
+              esac
+              echo "| $name | $icon $outcome |"
+            done
           } >> "$GITHUB_STEP_SUMMARY"
+
+          failed=""
+          for pair in "ingest:$INGEST" "sync-phase:$SYNC" "geocode:$GEOCODE" \
+                      "refresh-premium:$PREMIUM" "notify:$NOTIFY"; do
+            if [ "${pair#*:}" = "failure" ]; then failed="$failed ${pair%%:*}"; fi
+          done
+          if [ -n "$failed" ]; then
+            echo "::error::pipeline steps failed:$failed"
+            exit 1
+          fi
+          echo "all steps healthy"
