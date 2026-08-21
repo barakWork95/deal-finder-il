@@ -16,6 +16,7 @@ import {
   releaseDeliveries,
   setLastDigestAt,
   startRun,
+  syncLegacyProGrants,
   type Recipient,
   type Tier,
 } from "./repository";
@@ -140,18 +141,30 @@ export async function runNotificationWorker(options: WorkerOptions): Promise<Wor
           );
     summary.candidates = deals.length;
 
+    // Deprecated bootstrap: copies NOTIFY_PRO_USER_IDS into the tier column
+    // before it is read, so the switch to a database-owned plan does not drop
+    // anyone the env var was carrying. It never overrules a tier set in the
+    // admin dashboard, and a dry run does not write at all.
+    const legacyPro = new Set(notificationSettings.proUserIds);
+    if (!dryRun && legacyPro.size > 0) await syncLegacyProGrants([...legacyPro]);
+
     const recipients = await listRecipients();
     if (deals.length === 0 || recipients.length === 0) {
       return finalise(summary, runId, started);
     }
 
     await hydrateEmails(recipients, dryRun);
-    const proIds = new Set(notificationSettings.proUserIds);
 
     for (const recipient of recipients) {
       if (summary.sent + summary.failed >= notificationSettings.maxSendsPerRun) break;
 
-      const tier: Tier = proIds.has(recipient.clerkUserId) ? "pro" : recipient.tier;
+      // user_contacts.tier is the source of truth — set from the admin
+      // dashboard, bootstrapped above. The env fallback survives only for dry
+      // runs, which write nothing and so never see the bootstrap's effect.
+      const tier: Tier =
+        recipient.tier === "pro" || (dryRun && legacyPro.has(recipient.clerkUserId))
+          ? "pro"
+          : recipient.tier;
       if (recipient.unsubscribed) {
         summary.skipped += 1;
         continue;

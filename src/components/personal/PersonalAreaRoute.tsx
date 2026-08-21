@@ -3,6 +3,7 @@ import { listDeals, listCities } from "@/lib/repository";
 import { isAuthConfigured } from "@/lib/auth";
 import { getUserData } from "@/lib/user-repository";
 import { notificationStatus } from "@/lib/notifications/config";
+import { getContact } from "@/lib/notifications/repository";
 import { PersonalArea } from "@/components/personal/PersonalArea";
 import { parseAlertPrefill, parseTab, type PersonalTab } from "@/lib/alert-prefill";
 
@@ -30,6 +31,11 @@ export async function PersonalAreaRoute({
   const userId = isAuthConfigured() ? (await auth()).userId : null;
   const account = userId ? await getUserData(userId) : undefined;
 
+  // The plan, from the column that owns it. Sequential rather than alongside
+  // getUserData on purpose: one request holding two pooled connections at once
+  // is what deadlocked this page before (see src/lib/db.ts).
+  const contact = userId ? await getContact(userId) : null;
+
   // Whether alerts actually get sent depends on server-side keys the browser
   // cannot see, so the answer is resolved here and passed down — the panel
   // must never claim a channel is live when nothing is configured behind it.
@@ -47,6 +53,7 @@ export async function PersonalAreaRoute({
       prefill={parseAlertPrefill(params)}
       account={account}
       delivery={delivery}
+      tier={contact?.tier ?? "free"}
     />
   );
 }
