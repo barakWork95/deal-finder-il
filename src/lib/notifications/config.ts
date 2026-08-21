@@ -225,3 +225,20 @@ export function notificationStatus() {
     commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local",
   };
 }
+
+/**
+ * Where operational alerts go. Separate from user contact details on purpose:
+ * "the pipeline broke" is not a message for whoever happens to own an alert,
+ * and tying it to user data would make an ops channel disappear the moment
+ * someone unsubscribes.
+ */
+export function opsConfig() {
+  const phone = str("OPS_ALERT_PHONE");
+  const email = str("OPS_ALERT_EMAIL");
+  return {
+    phone,
+    email,
+    to: [phone, email].filter(Boolean) as string[],
+    minGapHours: int("OPS_ALERT_MIN_GAP_HOURS", 6),
+  };
+}

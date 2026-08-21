@@ -189,3 +189,47 @@ jobs:
             exit 1
           fi
           echo "all steps healthy"
+
+      # Runs only when the Summary step above has already failed the job, so it
+      # reports a real fault rather than every transient step outcome. The app
+      # owns the delivery: putting Green API credentials in GitHub as well as
+      # Vercel would mean two copies to rotate and drift.
+      - name: Report failure
+        if: failure()
+        env:
+          URL: ${{ secrets.NOTIFY_CRON_URL }}
+          SECRET: ${{ secrets.NOTIFY_CRON_SECRET }}
+          INGEST: ${{ steps.ingest.outcome }}
+          SYNC: ${{ steps.sync.outcome }}
+          GEOCODE: ${{ steps.geocode.outcome }}
+          PREMIUM: ${{ steps.premium.outcome }}
+          NOTIFY: ${{ steps.notify.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$SECRET" ]; then
+            echo "NOTIFY_CRON_* not set — cannot report the failure."
+            exit 0
+          fi
+
+          failed=""
+          for pair in "ingest:$INGEST" "sync-phase:$SYNC" "geocode:$GEOCODE" \
+                      "refresh-premium:$PREMIUM" "notify:$NOTIFY"; do
+            if [ "${pair#*:}" = "failure" ]; then failed="$failed ${pair%%:*}"; fi
+          done
+
+          text="צינור הנתונים נכשל (${MODE})
+          שלבים שנכשלו:${failed:- (לא ידוע)}
+          ${RUN_URL}"
+
+          # The ops endpoint lives on the same origin as the cron route.
+          base="${URL%%/api/*}"
+          code=$(curl -sS -o /tmp/ops.json -w '%{http_code}' \
+            -X POST "$base/api/ops/alert" \
+            -H "Authorization: Bearer $SECRET" \
+            -H "Content-Type: application/json" \
+            --data "$(printf '{"kind":"pipeline","text":%s}' "$(printf '%s' "$text" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")")
+          echo "ops alert -> HTTP $code"
+          cat /tmp/ops.json; echo
+          # Never let the notifier itself fail the job: the original failure is
+          # the news, and a red X on the reporter only obscures it.
+          exit 0
