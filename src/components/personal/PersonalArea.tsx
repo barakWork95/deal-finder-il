@@ -6,6 +6,8 @@ import type { Deal } from "@/lib/types";
 import type { AlertPrefill, PersonalTab } from "@/lib/alert-prefill";
 import { usePersonalAlerts, useSavedDeals } from "@/lib/personal-data";
 import type { UserData } from "@/lib/user-repository";
+import type { PlanTier } from "@/lib/types";
+import { trackEvent } from "@/lib/events";
 import { AlertsPanel } from "@/components/personal/AlertsPanel";
 import { SavedDealsPanel } from "@/components/personal/SavedDealsPanel";
 import { AccountPanel } from "@/components/personal/AccountPanel";
@@ -28,6 +30,7 @@ export function PersonalArea({
   prefill = {},
   account,
   delivery,
+  tier = "free",
 }: {
   deals: Deal[];
   cities: string[];
@@ -37,6 +40,11 @@ export function PersonalArea({
   account?: UserData;
   /** Which notification channels the server can send on — decided server-side. */
   delivery?: { email: boolean; whatsapp: boolean };
+  /**
+   * The plan on the account, read from user_contacts.tier on the server. A
+   * guest is always "free" — there is no account to carry a plan.
+   */
+  tier?: PlanTier;
 }) {
   const [tab, setTab] = useState<TabKey>(initialTab);
 
@@ -108,13 +116,20 @@ export function PersonalArea({
           </nav>
 
           <div className="mt-4 hidden rounded-lg border border-border bg-surface p-3 text-xs lg:block">
-            <div className="mb-1 font-semibold text-primary">מסלול: חינם</div>
+            <div className={`mb-1 font-semibold ${tier === "pro" ? "text-accent" : "text-primary"}`}>
+              מסלול: {tier === "pro" ? "PRO" : "חינם"}
+            </div>
             <div className="text-muted">
               בתקופת ההרצה כל היכולות פתוחות — ללא תשלום.
             </div>
             <button
               type="button"
-              onClick={() => selectTab("billing")}
+              onClick={() => {
+                // Separate from pricing_view: arriving at the table from here
+                // is deliberate interest, arriving by deep link is not.
+                trackEvent("plan_compare_click", { tier });
+                selectTab("billing");
+              }}
               className="mt-2 font-semibold text-accent hover:underline"
             >
               השוואת מסלולים
@@ -137,7 +152,7 @@ export function PersonalArea({
             )}
           {tab === "saved" && <SavedDealsPanel deals={deals} account={account} />}
           {tab === "account" && <AccountPanel />}
-            {tab === "billing" && <BillingPanel />}
+            {tab === "billing" && <BillingPanel tier={tier} />}
           </div>
         </div>
       </div>

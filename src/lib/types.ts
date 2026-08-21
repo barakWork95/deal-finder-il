@@ -173,3 +173,11 @@ export interface Alert {
   notifyOnOpen?: boolean;
   triggeredThisMonth: number;
 }
+
+/**
+ * Billing plan. `user_contacts.tier` (db/011_notifications.sql) is the source
+ * of truth and the admin dashboard is what sets it — see src/lib/admin.ts.
+ * Declared here rather than in a repository module so client components can
+ * name it without importing anything server-only.
+ */
+export type PlanTier = "free" | "pro";

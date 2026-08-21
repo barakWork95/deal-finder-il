@@ -149,8 +149,14 @@ export const notificationSettings = {
     );
   },
   /**
-   * Clerk ids granted PRO by hand, comma-separated. Billing is not live yet,
-   * so this is how the instant path gets exercised at all.
+   * @deprecated Clerk ids granted PRO by hand, comma-separated.
+   *
+   * **`user_contacts.tier` is the source of truth for who is PRO**, set from
+   * the admin dashboard. This variable is now only a one-way bootstrap
+   * (repository.syncLegacyProGrants) so the changeover does not downgrade
+   * whoever it was carrying, and it can never overrule a decision made in the
+   * dashboard. Remove it — and this getter — once the dashboard lists the same
+   * people as PRO.
    */
   get proUserIds(): string[] {
     return (str("NOTIFY_PRO_USER_IDS") ?? "")

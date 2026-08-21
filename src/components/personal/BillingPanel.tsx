@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Check, Info, Minus, ShieldCheck, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Crown, Info, Minus, ShieldCheck, Sparkles } from "lucide-react";
+import { trackEvent } from "@/lib/events";
+import type { PlanTier } from "@/lib/types";
 
 type Plan = {
   key: "free" | "pro";
@@ -45,15 +47,32 @@ const PLANS: Plan[] = [
   },
 ];
 
-export function BillingPanel() {
+export function BillingPanel({ tier = "free" }: { tier?: PlanTier }) {
   const [notice, setNotice] = useState(false);
+  const isPro = tier === "pro";
+
+  /**
+   * How many people reach the pricing table at all — the denominator without
+   * which the upgrade count below means nothing. `once` guards against React's
+   * development double-invoke and against a tab switch counting as a second
+   * visit; the server deduplicates as well, since this map dies with the page.
+   */
+  useEffect(() => {
+    trackEvent("pricing_view", { tier }, { once: true });
+  }, [tier]);
 
   return (
     <section className="space-y-5">
       <div>
         <h1 className="text-xl font-extrabold text-primary">מנוי ותשלום</h1>
-        <p className="mt-1 text-sm text-muted">
-          המסלול הנוכחי שלך: <span className="font-semibold text-primary">חינם</span>
+        <p className="mt-1 flex items-center gap-1.5 text-sm text-muted">
+          המסלול הנוכחי שלך:
+          <span
+            className={`inline-flex items-center gap-1 font-semibold ${isPro ? "text-accent" : "text-primary"}`}
+          >
+            {isPro && <Crown size={14} />}
+            {isPro ? "PRO" : "חינם"}
+          </span>
         </p>
       </div>
 
@@ -108,11 +127,23 @@ export function BillingPanel() {
               </ul>
 
               <div className="mt-5">
-                {pro ? (
+                {pro && isPro ? (
+                  <div className="rounded-lg border border-accent bg-accent-soft px-4 py-2.5 text-center text-sm font-semibold text-accent">
+                    המסלול הנוכחי שלך
+                  </div>
+                ) : pro ? (
                   <>
                     <button
                       type="button"
-                      onClick={() => setNotice(true)}
+                      onClick={() => {
+                        // The event that the roadmap actually hangs on. It
+                        // fires before the state update, and trackEvent uses
+                        // sendBeacon, so it survives even if the click ends up
+                        // navigating the page away.
+                        trackEvent("upgrade_click", { tier, price: 99 });
+                        trackEvent("billing_notice_view", { tier });
+                        setNotice(true);
+                      }}
                       className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#ffc439] px-4 py-2.5 text-sm font-bold text-[#0f1e3d] transition hover:brightness-105"
                     >
                       מעבר לתשלום עם
@@ -127,7 +158,7 @@ export function BillingPanel() {
                   </>
                 ) : (
                   <div className="rounded-lg border border-border bg-surface-2 px-4 py-2.5 text-center text-sm font-semibold text-muted">
-                    המסלול הנוכחי שלך
+                    {isPro ? "מסלול הבסיס" : "המסלול הנוכחי שלך"}
                   </div>
                 )}
               </div>
