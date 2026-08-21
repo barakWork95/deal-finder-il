@@ -253,7 +253,11 @@ async function runOpeningFor(
 ): Promise<boolean> {
   if (tier !== "pro") return false;
 
-  const alerts = recipient.alerts.filter((alert) => alert.frequency === "instant");
+  // notifyOnOpen defaults to on, so an alert saved before the switch existed
+  // keeps behaving the way its owner has already experienced.
+  const alerts = recipient.alerts.filter(
+    (alert) => alert.frequency === "instant" && alert.notifyOnOpen !== false,
+  );
   if (alerts.length === 0) return false;
 
   let touched = false;

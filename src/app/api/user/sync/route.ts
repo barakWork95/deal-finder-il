@@ -40,6 +40,7 @@ function sanitise(body: unknown): UserData {
               ? (a.frequency as AlertFrequency)
               : "instant",
             isActive: a.isActive !== false,
+            notifyOnOpen: a.notifyOnOpen !== false,
             triggeredThisMonth: 0,
           },
         ];

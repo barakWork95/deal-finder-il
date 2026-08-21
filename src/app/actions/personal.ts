@@ -49,6 +49,7 @@ function sanitiseAlert(input: Alert): Alert {
       : [],
     frequency: FREQUENCIES.includes(input.frequency) ? input.frequency : "instant",
     isActive: input.isActive !== false,
+    notifyOnOpen: input.notifyOnOpen !== false,
     triggeredThisMonth: 0,
   };
 }

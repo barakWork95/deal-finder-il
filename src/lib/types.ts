@@ -164,5 +164,12 @@ export interface Alert {
   channels: AlertChannel[];
   frequency: AlertFrequency;
   isActive: boolean;
+  /**
+   * Send a second message when a matching טרם החל tender opens for bidding.
+   * Defaults to on: about 150 of 355 active tenders are not yet open, so
+   * without it the discovery alert is often the only word you get — weeks
+   * before you can act on it.
+   */
+  notifyOnOpen?: boolean;
   triggeredThisMonth: number;
 }
