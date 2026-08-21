@@ -40,14 +40,28 @@ function authorise(request: NextRequest): NextResponse | null {
   return null;
 }
 
+const MODES: WorkerMode[] = ["instant", "opening", "digest"];
+
 function parseModes(value: string | null): WorkerMode[] {
-  if (value === "digest") return ["digest"];
-  if (value === "opening") return ["opening"];
-  // "both" predates the opening pass and stays as it was, so an existing cron
-  // entry does not silently start sending a new kind of message.
+  if (!value) return ["instant"];
+
+  // "both" predates the opening pass and keeps its old meaning, so an existing
+  // cron entry cannot silently start sending a new kind of message.
   if (value === "both") return ["instant", "digest"];
-  if (value === "all") return ["instant", "opening", "digest"];
-  return ["instant"];
+  if (value === "all") return [...MODES];
+
+  // Comma-separated, so the hourly pipeline can ask for instant+opening
+  // without dragging the digest along — the digest is deliberately a daily
+  // 05:00 job, and running it hourly would deliver it at an arbitrary hour.
+  const requested = value
+    .split(",")
+    .map((m) => m.trim())
+    .filter((m): m is WorkerMode => MODES.includes(m as WorkerMode));
+
+  // Preserve MODES order: opening must run after instant, so a tender
+  // discovered and opening in the same run is introduced before it is chased.
+  const ordered = MODES.filter((m) => requested.includes(m));
+  return ordered.length ? ordered : ["instant"];
 }
 
 async function handle(request: NextRequest) {

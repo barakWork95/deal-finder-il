@@ -22,6 +22,7 @@ function mapAlert(row: Record<string, unknown>): Alert {
     channels: ((row.channels as string[]) ?? []) as AlertChannel[],
     frequency: (row.frequency as AlertFrequency) ?? "instant",
     isActive: Boolean(row.is_active),
+    notifyOnOpen: row.notify_on_open !== false,
     triggeredThisMonth: 0, // nothing sends yet; see AlertsPanel's notice
   };
 }
@@ -48,9 +49,11 @@ export async function getUserData(clerkUserId: string): Promise<UserData> {
 export async function insertAlert(clerkUserId: string, alert: Alert): Promise<void> {
   if (!hasDb) return;
   await sql`
-    INSERT INTO user_alerts (id, clerk_user_id, name, filters, channels, frequency, is_active)
+    INSERT INTO user_alerts
+      (id, clerk_user_id, name, filters, channels, frequency, is_active, notify_on_open)
     VALUES (${alert.id}, ${clerkUserId}, ${alert.name}, ${sql.json(alert.filters)},
-            ${alert.channels}, ${alert.frequency}, ${alert.isActive})
+            ${alert.channels}, ${alert.frequency}, ${alert.isActive},
+            ${alert.notifyOnOpen !== false})
     ON CONFLICT (id) DO NOTHING`;
 }
 
@@ -101,15 +104,18 @@ export async function mergeUserData(clerkUserId: string, incoming: UserData): Pr
 
   for (const alert of incoming.alerts) {
     await sql`
-      INSERT INTO user_alerts (id, clerk_user_id, name, filters, channels, frequency, is_active)
+      INSERT INTO user_alerts
+        (id, clerk_user_id, name, filters, channels, frequency, is_active, notify_on_open)
       VALUES (${alert.id}, ${clerkUserId}, ${alert.name}, ${sql.json(alert.filters)},
-              ${alert.channels}, ${alert.frequency}, ${alert.isActive})
+              ${alert.channels}, ${alert.frequency}, ${alert.isActive},
+              ${alert.notifyOnOpen !== false})
       ON CONFLICT (id) DO UPDATE SET
         name = EXCLUDED.name,
         filters = EXCLUDED.filters,
         channels = EXCLUDED.channels,
         frequency = EXCLUDED.frequency,
         is_active = EXCLUDED.is_active,
+        notify_on_open = EXCLUDED.notify_on_open,
         updated_at = now()
       WHERE user_alerts.clerk_user_id = ${clerkUserId}`;
   }

@@ -144,6 +144,7 @@ export async function listRecipients(): Promise<Recipient[]> {
   const rows = await sql`
     SELECT
       ua.id, ua.clerk_user_id, ua.name, ua.filters, ua.channels, ua.frequency,
+      ua.notify_on_open,
       uc.email, uc.phone_e164, uc.tier, uc.email_opt_in, uc.whatsapp_opt_in,
       uc.unsubscribed_at, uc.unsubscribe_token, uc.last_digest_at
     FROM user_alerts ua
@@ -167,6 +168,7 @@ export async function listRecipients(): Promise<Recipient[]> {
       channels: ((row.channels as string[]) ?? []) as AlertChannel[],
       frequency: (row.frequency as AlertFrequency) ?? "instant",
       isActive: true,
+      notifyOnOpen: row.notify_on_open !== false,
       triggeredThisMonth: 0,
     });
   }

@@ -12,6 +12,7 @@ import {
   Plus,
   SlidersHorizontal,
   Radar,
+  CalendarClock,
   type LucideIcon,
 } from "lucide-react";
 import type {
@@ -95,6 +96,9 @@ export function AlertsPanel({
   const [types, setTypes] = useState<DealType[]>(start.types);
   const [zonings, setZonings] = useState<Zoning[]>(start.zonings);
   const [phases, setPhases] = useState<TenderPhase[]>(start.phases);
+  // On by default: ~150 of 355 active tenders are טרם החל, so without this the
+  // discovery alert is often the only word you get — weeks before you can bid.
+  const [notifyOnOpen, setNotifyOnOpen] = useState(true);
   const [channels, setChannels] = useState<AlertChannel[]>(["email"]);
   const [frequency, setFrequency] = useState<AlertFrequency>("instant");
 
@@ -108,6 +112,7 @@ export function AlertsPanel({
     setTypes(d.types);
     setZonings(d.zonings);
     setPhases(d.phases);
+    setNotifyOnOpen(true);
     setCarriedFilters(false);
   }
 
@@ -133,6 +138,7 @@ export function AlertsPanel({
       channels,
       frequency,
       isActive: true,
+      notifyOnOpen,
       triggeredThisMonth: 0,
     };
     void create(alert);
@@ -362,6 +368,27 @@ export function AlertsPanel({
           </div>
         </div>
 
+        {/* Only meaningful for instant alerts: a daily/weekly digest already
+            reports the tender again once it is open. */}
+        {frequency === "instant" && (
+          <label className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-lg border border-border bg-surface-2 p-3">
+            <input
+              type="checkbox"
+              checked={notifyOnOpen}
+              onChange={(e) => setNotifyOnOpen(e.target.checked)}
+              className="mt-0.5 accent-[var(--accent)]"
+            />
+            <span className="text-[11px] leading-relaxed text-muted">
+              <span className="flex items-center gap-1.5 font-semibold text-primary">
+                <CalendarClock size={13} className="text-accent" />
+                עדכון נוסף כשההגשה נפתחת
+              </span>
+              כמחצית מהמכרזים מתפרסמים לפני שההגשה בהם נפתחת. סמן כדי לקבל תזכורת שנייה
+              ביום שבו אפשר להגיש הצעה — ולא רק בפרסום הראשוני.
+            </span>
+          </label>
+        )}
+
         <div className="mt-5 flex flex-wrap items-center gap-2">
           <span className="flex items-center gap-1.5 text-xs text-muted">
             <Radar size={14} className="text-accent" />
@@ -423,6 +450,14 @@ function AlertCard({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="font-bold text-primary">{alert.name}</h3>
+            {alert.frequency === "instant" && alert.notifyOnOpen !== false && (
+              <span
+                title="תישלח תזכורת נוספת ביום שההגשה נפתחת"
+                className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-semibold text-accent"
+              >
+                <CalendarClock size={11} /> גם בפתיחת ההגשה
+              </span>
+            )}
             <span
               className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
                 alert.isActive ? "bg-positive-soft text-positive" : "bg-surface-2 text-muted"
