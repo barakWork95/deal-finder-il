@@ -44,7 +44,10 @@ async function fetchTenders() {
   }
 
   console.log("→ warming session…");
-  await warmSession();
+  await warmSession({
+    onRetry: ({ attempt, attempts, delay, reason }) =>
+      console.log(`  retry ${attempt}/${attempts} in ${delay}ms — warm session: ${reason}`),
+  });
 
   console.log("→ fetching tender list…");
   // Retries through the portal's flapping rather than failing the run; --file

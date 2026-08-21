@@ -29,11 +29,44 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // caller shares one session rather than re-warming per request.
 let cookie = "";
 
-export async function warmSession() {
-  const res = await fetch(`${BASE}/`, { headers: { "User-Agent": UA } });
-  const setCookie = res.headers.getSetCookie?.() ?? [];
-  if (setCookie.length) cookie = setCookie.map((c) => c.split(";")[0]).join("; ");
-  return res.status;
+/**
+ * Pick up a session cookie from the SPA root, retrying like everything else.
+ *
+ * This used to be a bare fetch, and it killed a scheduled pipeline run: the
+ * portal flapped on the very first request and the whole job exited 1 with
+ * "→ warming session… ✗ fetch failed". The one call that runs *before* the
+ * retrying client was the one call with no retries — exactly the failure mode
+ * getJson exists to absorb.
+ *
+ * `attempts: 1` is how getJson re-warms mid-retry: the outer loop is already
+ * counting and backing off, so an inner loop there would multiply the delays.
+ */
+export async function warmSession(options = {}) {
+  const { attempts = 4, baseDelayMs = 1000, maxDelayMs = 15_000, onRetry = null } = options;
+  let lastReason = "unknown";
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const res = await fetch(`${BASE}/`, { headers: { "User-Agent": UA } });
+      const setCookie = res.headers.getSetCookie?.() ?? [];
+      if (setCookie.length) cookie = setCookie.map((c) => c.split(";")[0]).join("; ");
+      if (res.ok) return res.status;
+      lastReason = `HTTP ${res.status}`;
+    } catch (error) {
+      lastReason = `network: ${error.message}`;
+    }
+
+    if (attempt < attempts) {
+      const backoff = Math.min(maxDelayMs, baseDelayMs * 2 ** (attempt - 1));
+      const delay = Math.round(backoff * (0.5 + Math.random()));
+      onRetry?.({ attempt, attempts, delay, reason: lastReason, label: "warmSession" });
+      await sleep(delay);
+    }
+  }
+
+  throw new RamiError(`warmSession: gave up after ${attempts} attempts (${lastReason})`, {
+    attempts,
+  });
 }
 
 function headersFor(init) {
@@ -96,7 +129,7 @@ export async function getJson(url, init = {}, options = {}) {
         // dropped session presents the same way, and re-warming is one cheap
         // request against several wasted retries.
         lastReason = `HTML body with status ${res.status}`;
-        await warmSession().catch(() => {});
+        await warmSession({ attempts: 1 }).catch(() => {});
       } else if (res.status === 429 || res.status >= 500) {
         lastReason = `HTTP ${res.status}`;
       } else {
