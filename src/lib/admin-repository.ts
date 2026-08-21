@@ -454,9 +454,10 @@ export async function getAdminSnapshot(): Promise<AdminSnapshot> {
 /**
  * Sets someone's plan, and records that a human did it.
  *
- * `tier_source = 'admin'` is the part that matters beyond the tier itself: it
- * is what stops the legacy NOTIFY_PRO_USER_IDS bootstrap from quietly undoing
- * a downgrade on the next worker run.
+ * `tier_source = 'admin'` records that a person decided this, as against a row
+ * that simply never had a plan set ('default') or one carried over from the
+ * retired environment-variable grant ('legacy_env', which older rows still
+ * show and which nothing writes any more).
  *
  * The row is created if it does not exist — someone can be granted PRO before
  * they have ever opened the account form, and the alternative is a grant that
