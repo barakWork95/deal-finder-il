@@ -2,6 +2,7 @@ import {
   Activity,
   AlertTriangle,
   BarChart3,
+  CreditCard,
   Database,
   History,
   Mail,
@@ -46,13 +47,25 @@ export type NotificationHealth = {
   commit: string;
 };
 
+export type BillingHealth = {
+  configured: boolean;
+  environment: string;
+  currency: string;
+  price: number;
+  planId: string | null;
+  webhooksVerifiable: boolean;
+  missing: string[];
+};
+
 export function AdminDashboard({
   snapshot,
   health,
+  billing,
   devOpen,
 }: {
   snapshot: AdminSnapshot;
   health: NotificationHealth;
+  billing: BillingHealth;
   devOpen: boolean;
 }) {
   const { totals, deliveries, funnel, pipeline } = snapshot;
@@ -272,6 +285,42 @@ export function AdminDashboard({
             <Row label="מכרז חדש אחרון" value={formatWhen(pipeline.lastSeenAt)} />
             <Row label="עדכון אחרון" value={formatWhen(pipeline.lastUpdatedAt)} />
           </dl>
+        </Section>
+
+        <Section
+          title="סליקה"
+          icon={CreditCard}
+          hint={
+            billing.configured && billing.environment === "sandbox"
+              ? "במצב Sandbox על פרודקשן כפתור התשלום מוצג למנהלים בלבד — חשבון PayPal אמיתי לא יכול להשלים תשלום בסביבת בדיקה. PAYPAL_ENV=live מסיר את ההגבלה."
+              : undefined
+          }
+        >
+          <dl className="space-y-2 text-sm">
+            <Row
+              label="מצב"
+              value={billing.configured ? "מוכן לקבלת תשלומים" : "לא מוגדר — הכפתור לא מוצג"}
+            />
+            <Row label="סביבה" value={billing.environment} ltr />
+            <Row label="מחיר" value={`${billing.price} ${billing.currency}`} ltr />
+            <Row label="מסלול (Plan)" value={billing.planId ?? "—"} ltr />
+            <Row
+              label="אימות Webhook"
+              value={billing.webhooksVerifiable ? "פעיל" : "חסר — לא יתקבלו אירועים"}
+            />
+          </dl>
+          {billing.missing.length > 0 && (
+            <div className="mt-3 rounded-lg border border-border bg-surface-2 p-2.5">
+              <div className="mb-1 text-[11px] font-semibold text-muted">חסר בהגדרות:</div>
+              <ul className="space-y-0.5">
+                {billing.missing.map((item) => (
+                  <li key={item}>
+                    <Mono>{item}</Mono>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </Section>
 
         <Section title="ערוצי שליחה" icon={Mail}>

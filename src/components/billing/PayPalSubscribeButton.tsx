@@ -59,13 +59,37 @@ function loadSdk(clientId: string, currency: string): Promise<PayPalNamespace> {
     });
     script.src = `https://www.paypal.com/sdk/js?${params}`;
     script.async = true;
-    script.onload = () =>
-      window.paypal ? resolve(window.paypal) : reject(new Error("sdk_loaded_without_namespace"));
-    script.onerror = () => {
+
+    const fail = (reason: string) => {
+      window.clearTimeout(timer);
       // Let a later attempt retry rather than caching the failure forever.
       sdkLoads.delete(key);
-      reject(new Error("sdk_load_failed"));
+      console.error(`[paypal] SDK load failed: ${reason}`, script.src);
+      reject(new Error(reason));
     };
+
+    /**
+     * Neither onload nor onerror is guaranteed to fire. A Content-Security-
+     * Policy refusal, and some blocking extensions, drop the request in a way
+     * that settles nothing — and a promise that never settles leaves the
+     * button showing "loading" forever, with no error anywhere and no network
+     * request to inspect. Ten seconds is far longer than the SDK needs and far
+     * shorter than a visitor's patience.
+     */
+    const timer = window.setTimeout(() => fail("sdk_timeout"), 10_000);
+
+    script.onload = () => {
+      window.clearTimeout(timer);
+      if (window.paypal) {
+        resolve(window.paypal);
+      } else {
+        // The script ran but installed nothing — almost always a client-id the
+        // SDK rejected, which it reports only in the console.
+        fail("sdk_loaded_without_namespace");
+      }
+    };
+    script.onerror = () => fail("sdk_load_failed");
+
     document.head.appendChild(script);
   });
 
@@ -117,7 +141,15 @@ export function PayPalSubscribeButton({
               id?: string;
               error?: string;
             };
-            if (!response.ok || !json.id) throw new Error(json.error ?? "create_failed");
+            if (!response.ok || !json.id) {
+              // PayPal's own callback swallows this into a generic message, so
+              // the specific reason — unauthenticated, billing_not_configured,
+              // create_failed — is logged and kept for our own error text.
+              const reason = json.error ?? `http_${response.status}`;
+              console.error("[paypal] could not create subscription:", reason);
+              setError(reason);
+              throw new Error(reason);
+            }
             return json.id;
           },
 
@@ -145,9 +177,12 @@ export function PayPalSubscribeButton({
           },
 
           onError: (err: unknown) => {
-            console.error("[paypal]", err);
+            // Fires for anything inside PayPal's own flow, including a
+            // createSubscription that threw — in which case `error` already
+            // holds the specific reason and must not be flattened.
+            console.error("[paypal] checkout error:", err);
             if (cancelled) return;
-            setError("checkout_error");
+            setError((current) => current ?? "checkout_error");
             setStatus("error");
           },
         });
@@ -156,9 +191,11 @@ export function PayPalSubscribeButton({
           if (!cancelled) setStatus("ready");
         });
       })
-      .catch(() => {
+      .catch((reason: unknown) => {
         if (cancelled) return;
-        setError("sdk_error");
+        const code = reason instanceof Error ? reason.message : "sdk_error";
+        console.error("[paypal] checkout unavailable:", code);
+        setError(code);
         setStatus("error");
       });
 
@@ -204,9 +241,10 @@ export function PayPalSubscribeButton({
 
       {status === "error" && (
         <div className="rounded-lg border border-negative/40 bg-negative-soft px-4 py-3 text-center text-sm text-negative">
-          {error === "sdk_error"
-            ? "לא הצלחנו לטעון את מסך התשלום של PayPal. בדקו חוסם פרסומות ונסו לרענן."
-            : "משהו השתבש בתהליך התשלום. לא בוצע חיוב — אפשר לנסות שוב."}
+          {errorMessage(error)}
+          <span className="mt-1 block text-[10px] text-faint" dir="ltr">
+            {error}
+          </span>
         </div>
       )}
 
@@ -215,4 +253,23 @@ export function PayPalSubscribeButton({
       </p>
     </div>
   );
+}
+
+/** Turns a failure code into something a person can act on. */
+function errorMessage(code: string | null): string {
+  switch (code) {
+    case "sdk_timeout":
+    case "sdk_load_failed":
+      return "מסך התשלום של PayPal לא נטען. חוסם פרסומות או תוסף פרטיות חוסם אותו לרוב — נסו לכבות אותו ולרענן.";
+    case "sdk_loaded_without_namespace":
+      return "PayPal טען אך לא אתחל. ככל הנראה מזהה לקוח (client id) שגוי בהגדרות.";
+    case "unauthenticated":
+      return "צריך להתחבר מחדש כדי להשלים את המנוי.";
+    case "billing_not_configured":
+      return "הסליקה עדיין לא מוגדרת בצד השרת.";
+    case "create_failed":
+      return "PayPal לא הצליח לפתוח את המנוי. לא בוצע חיוב — אפשר לנסות שוב.";
+    default:
+      return "משהו השתבש בתהליך התשלום. לא בוצע חיוב — אפשר לנסות שוב.";
+  }
 }

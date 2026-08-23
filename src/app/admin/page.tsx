@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { currentAdminId, isDevOpenAccess } from "@/lib/admin";
 import { getAdminSnapshot } from "@/lib/admin-repository";
 import { notificationStatus } from "@/lib/notifications/config";
+import { billingStatus } from "@/lib/billing/config";
 import { AdminDashboard } from "@/components/admin/AdminDashboard";
 
 export const metadata = {
@@ -22,6 +23,7 @@ export default async function AdminPage() {
 
   const snapshot = await getAdminSnapshot();
   const status = notificationStatus();
+  const billing = billingStatus();
 
   return (
     <AdminDashboard
@@ -35,6 +37,7 @@ export default async function AdminPage() {
         missing: status.missing,
         commit: status.commit,
       }}
+      billing={billing}
       devOpen={isDevOpenAccess()}
     />
   );
