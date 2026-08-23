@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { headroom, isAtLimit, isScorePresetLocked, limitFor, hasFeature } from "./limits.ts";
+import { alertScoreCeiling, isAlertScoreLocked, FREE_MAX_ALERT_SCORE } from "./limits.ts";
 
 /**
  * The plan rules, tested directly.
@@ -63,5 +64,20 @@ test("gated capabilities belong to PRO only", () => {
   for (const feature of ["score_filter", "premium_calculator"] as const) {
     assert.equal(hasFeature("pro", feature), true);
     assert.equal(hasFeature("free", feature), false);
+  }
+});
+
+test("alert score: free stops at 79, PRO goes to 99", () => {
+  assert.equal(alertScoreCeiling("free"), FREE_MAX_ALERT_SCORE);
+  assert.equal(alertScoreCeiling("pro"), 99);
+
+  assert.equal(isAlertScoreLocked("free", undefined), false);
+  assert.equal(isAlertScoreLocked("free", 0), false);
+  assert.equal(isAlertScoreLocked("free", 79), false);
+  assert.equal(isAlertScoreLocked("free", 80), true);
+  assert.equal(isAlertScoreLocked("free", 99), true);
+
+  for (const score of [0, 79, 80, 99]) {
+    assert.equal(isAlertScoreLocked("pro", score), false, `PRO should reach ${score}`);
   }
 });

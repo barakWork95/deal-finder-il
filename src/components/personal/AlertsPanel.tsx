@@ -28,8 +28,9 @@ import type {
 import { DEAL_TYPE_LABEL, formatILSCompact } from "@/lib/format";
 import { useProfile } from "@/lib/client-store";
 import { usePersonalAlerts } from "@/lib/personal-data";
-import { isAtLimit, limitFor } from "@/lib/limits";
+import { alertScoreCeiling, isAtLimit, limitFor } from "@/lib/limits";
 import { useUpgradeGate } from "@/components/UpgradeGate";
+import { trackEvent } from "@/lib/events";
 import type { UserData } from "@/lib/user-repository";
 import { Chip, EmptyState, Field, IconBtn } from "@/components/personal/controls";
 import { ZONINGS, hasPrefill, type AlertPrefill } from "@/lib/alert-prefill";
@@ -90,6 +91,12 @@ export function AlertsPanel({
 
   const alertLimit = limitFor(tier, "alerts");
   const atAlertLimit = isAtLimit(tier, "alerts", activeCount);
+
+  // The builder's slider goes to 99 for everyone; a free account simply cannot
+  // leave it above this, which is where "סינון אוטומטי לפי ציון עסקה 80+"
+  // stops being free.
+  const scoreCeiling = alertScoreCeiling(tier);
+  const scoreLocked = scoreCeiling < 99;
   const [profile] = useProfile();
   const [justSaved, setJustSaved] = useState<string | null>(null);
 
@@ -100,7 +107,9 @@ export function AlertsPanel({
   const [city, setCity] = useState(start.city);
   const [maxPrice, setMaxPrice] = useState(start.maxPrice);
   const [minDiscount, setMinDiscount] = useState(start.minDiscount);
-  const [minScore, setMinScore] = useState(start.minScore);
+  // start.minScore defaults to 80, which a free account may not use: without
+  // this the builder would open in a state it cannot save from.
+  const [minScore, setMinScore] = useState(Math.min(start.minScore, alertScoreCeiling(tier)));
   const [types, setTypes] = useState<DealType[]>(start.types);
   const [zonings, setZonings] = useState<Zoning[]>(start.zonings);
   const [phases, setPhases] = useState<TenderPhase[]>(start.phases);
@@ -116,7 +125,7 @@ export function AlertsPanel({
     setCity(d.city);
     setMaxPrice(d.maxPrice);
     setMinDiscount(d.minDiscount);
-    setMinScore(d.minScore);
+    setMinScore(Math.min(d.minScore, scoreCeiling));
     setTypes(d.types);
     setZonings(d.zonings);
     setPhases(d.phases);
@@ -317,14 +326,35 @@ export function AlertsPanel({
             />
           </Field>
 
-          <Field label={`ציון עסקה מינ׳: ${minScore}`}>
+          <Field
+            label={`ציון עסקה מינ׳: ${minScore}`}
+            hint={scoreLocked ? `סינון ${scoreCeiling + 1}+ פתוח למנויי PRO` : undefined}
+          >
             <input
               type="range"
               min={0}
               max={99}
               step={1}
               value={minScore}
-              onChange={(e) => setMinScore(Number(e.target.value))}
+              // The full range stays draggable on purpose. Capping `max` would
+              // hide that a sharper filter exists at all; letting the handle go
+              // and snapping it back says what the plan does not include, and
+              // records that someone wanted it.
+              onChange={(e) => {
+                const next = Number(e.target.value);
+                if (next > scoreCeiling) {
+                  trackEvent("limit_hit", {
+                    kind: "score_filter",
+                    tier,
+                    from: "alert_builder",
+                    value: next,
+                  });
+                  show({ feature: "score_filter" });
+                  setMinScore(scoreCeiling);
+                  return;
+                }
+                setMinScore(next);
+              }}
               className="mt-3 w-full accent-[var(--accent)]"
             />
           </Field>

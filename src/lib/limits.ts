@@ -106,12 +106,37 @@ export function isScorePresetLocked(tier: PlanTier, preset: number): boolean {
   return !hasFeature(tier, "score_filter") && preset > FREE_MAX_SCORE_FILTER;
 }
 
+/**
+ * The highest Deal Score a free account may build an alert around.
+ *
+ * 79 rather than the feed's 60 because the controls differ: the feed offers
+ * fixed presets and 60 is one of them, while the builder is a continuous
+ * slider where the meaningful boundary is "just below the paid threshold".
+ * Both express the same promise — "סינון אוטומטי לפי ציון עסקה 80+" is PRO.
+ */
+export const FREE_MAX_ALERT_SCORE = 79;
+
+export function isAlertScoreLocked(tier: PlanTier, minScore: number | undefined): boolean {
+  if (minScore == null) return false;
+  return !hasFeature(tier, "score_filter") && minScore > FREE_MAX_ALERT_SCORE;
+}
+
+/** The highest value this plan may drag the builder's slider to. */
+export function alertScoreCeiling(tier: PlanTier): number {
+  return hasFeature(tier, "score_filter") ? 99 : FREE_MAX_ALERT_SCORE;
+}
+
 export const FEATURE_COPY: Record<ProFeature, { title: string; body: string }> = {
   score_filter: {
     title: "סינון לפי ציון עסקה 80+ הוא יכולת PRO",
+    // Names both ceilings rather than one: the feed offers presets and stops at
+    // 60, the alert builder is a slider and stops at 79. A single number would
+    // be wrong on whichever of the two screens the reader is actually looking
+    // at, and the modal is shown from both.
     body:
-      "מסלול החינם כולל סינון עד ציון 60. הסינון לציונים הגבוהים — המכרזים שבהם הפער מול השומה " +
-      "הכי גדול — פתוח למנויי PRO. שאר הפילטרים והפיד המלא נשארים זמינים לכולם.",
+      `במסלול החינם אפשר לסנן בפיד עד ציון ${FREE_MAX_SCORE_FILTER}, ובבניית התראה עד ` +
+      `${FREE_MAX_ALERT_SCORE}. סינון לציון 80 ומעלה — המכרזים שבהם הפער מול השומה הכי גדול — ` +
+      "פתוח למנויי PRO. שאר הפילטרים והפיד המלא נשארים זמינים לכולם.",
   },
   premium_calculator: {
     title: "מחשבון פרמיית הזכייה המלא הוא יכולת PRO",

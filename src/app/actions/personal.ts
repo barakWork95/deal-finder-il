@@ -27,7 +27,7 @@ import { upsertContact } from "@/lib/notifications/repository";
  * rows.
  */
 
-import type { LimitKind } from "@/lib/limits";
+import type { LimitKind, ProFeature } from "@/lib/limits";
 
 export type ActionResult =
   | { ok: true }
@@ -36,7 +36,9 @@ export type ActionResult =
    * The plan said no. Carries the numbers because the browser has to explain
    * the wall, and "failed" with no figures is indistinguishable from a bug.
    */
-  | { ok: false; reason: "limit"; kind: LimitKind; limit: number; current: number };
+  | { ok: false; reason: "limit"; kind: LimitKind; limit: number; current: number }
+  /** A PRO-only capability, which has no count to report — see ProFeature. */
+  | { ok: false; reason: "pro_feature"; feature: ProFeature };
 
 async function currentUserId(): Promise<string | null> {
   if (!isAuthConfigured()) return null;
