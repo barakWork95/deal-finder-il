@@ -86,6 +86,35 @@ into `PAYPAL_WEBHOOK_ID`.
 Env vars are in `.env.example`. `PAYPAL_ENV` defaults to **sandbox**; `live`
 has to be typed out.
 
+The script accepts `PAYPAL_CLIENT_ID` as well as `NEXT_PUBLIC_PAYPAL_CLIENT_ID`
+(the NEXT_PUBLIC_ name exists because the *browser* needs it), and refuses to
+run if the id and the secret come from different places — a shell-supplied live
+secret beside a sandbox id from `.env.local` produces a well-formed request that
+PayPal rejects as `invalid_client`, an error that names neither the environment
+nor the mismatch.
+
+## Going live
+
+Not one variable. Sandbox and live share nothing — separate credentials, a
+separate plan, a separate webhook:
+
+```bash
+PAYPAL_ENV=live \
+PAYPAL_CLIENT_ID="<live id>" \
+PAYPAL_CLIENT_SECRET="<live secret>" \
+npm run paypal:plan
+```
+
+Then set `PAYPAL_ENV=live`, the live `NEXT_PUBLIC_PAYPAL_CLIENT_ID`,
+`PAYPAL_CLIENT_SECRET`, the new `PAYPAL_PLAN_ID` and the new
+`PAYPAL_WEBHOOK_ID` on Vercel — and **redeploy**, because `NEXT_PUBLIC_*` is
+inlined at build time and the running build has the old value baked in.
+
+`PAYPAL_ENV=live` does three things at once, so know all of them: it points the
+API at production, it removes the admin-only restriction on the checkout button
+(sandbox-on-production shows it to admins only), and it switches the pricing
+banner to its live wording.
+
 ## Testing in sandbox
 
 1. Set the four variables in `.env.local` (`PAYPAL_ENV=sandbox`), run
