@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, BookmarkX, Gavel } from "lucide-react";
+import { ArrowLeft, BookmarkX, Crown, Gavel } from "lucide-react";
 import type { Deal } from "@/lib/types";
 import { formatILS, formatLandArea } from "@/lib/format";
 import { submissionInfo } from "@/lib/tender-phase";
 import { useSavedDeals } from "@/lib/personal-data";
+import { isAtLimit, limitFor } from "@/lib/limits";
+import { useUpgradeGate } from "@/components/UpgradeGate";
 import type { UserData } from "@/lib/user-repository";
 import { DealTypeChip, DiscountTag, ScoreChip } from "@/components/ui";
 import { EmptyState, IconBtn } from "@/components/personal/controls";
@@ -16,7 +18,10 @@ import { EmptyState, IconBtn } from "@/components/personal/controls";
  * price or a deadline that has since moved.
  */
 export function SavedDealsPanel({ deals, account }: { deals: Deal[]; account?: UserData }) {
-  const { ids, remove } = useSavedDeals(account);
+  const { ids, remove, tier } = useSavedDeals(account);
+  const { show } = useUpgradeGate();
+  const savedLimit = limitFor(tier, "saved");
+  const atSavedLimit = isAtLimit(tier, "saved", ids.length);
   const byId = new Map(deals.map((d) => [d.id, d]));
 
   const saved = ids.map((id) => byId.get(id)).filter((d): d is Deal => Boolean(d));
@@ -29,9 +34,37 @@ export function SavedDealsPanel({ deals, account }: { deals: Deal[]; account?: U
         {saved.length > 0 && (
           <span className="text-xs text-faint">
             <span className="num font-semibold text-muted">{saved.length}</span> מכרזים
+            {savedLimit != null && (
+              <>
+                {" "}
+                <span className="text-faint">מתוך</span>{" "}
+                <span className="num font-semibold text-muted">{savedLimit}</span>
+              </>
+            )}
           </span>
         )}
       </div>
+
+      {/* Shown here as well as at the point of refusal, so the number is
+          visible while deciding what to remove rather than only when the next
+          save is blocked. */}
+      {atSavedLimit && savedLimit != null && (
+        <div className="mb-3 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning-soft p-3 text-[11px] leading-relaxed text-warning">
+          <Crown size={14} className="mt-px shrink-0" />
+          <span>
+            הגעת ל-<span className="num font-bold">{savedLimit}</span> העסקאות השמורות של מסלול
+            החינם. השמורות הקיימות נשארות — כדי לשמור עסקה נוספת אפשר להסיר אחת מהן, או{" "}
+            <button
+              type="button"
+              onClick={() => show({ kind: "saved", limit: savedLimit, current: ids.length })}
+              className="font-bold underline hover:no-underline"
+            >
+              לעבור ל-PRO
+            </button>
+            .
+          </span>
+        </div>
+      )}
 
       {goneCount > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface-2 p-3 text-[11px] text-muted">

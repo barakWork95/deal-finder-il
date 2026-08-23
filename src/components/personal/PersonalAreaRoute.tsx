@@ -3,7 +3,6 @@ import { listDeals, listCities } from "@/lib/repository";
 import { isAuthConfigured } from "@/lib/auth";
 import { getUserData } from "@/lib/user-repository";
 import { notificationStatus } from "@/lib/notifications/config";
-import { getContact } from "@/lib/notifications/repository";
 import { paypalConfig, canCheckout } from "@/lib/billing/config";
 import { isAdminUserId } from "@/lib/admin";
 import { listSubscriptionsForUser } from "@/lib/billing/repository";
@@ -33,11 +32,6 @@ export async function PersonalAreaRoute({
   // arrive populated instead of flashing empty while a client fetch lands.
   const userId = isAuthConfigured() ? (await auth()).userId : null;
   const account = userId ? await getUserData(userId) : undefined;
-
-  // The plan, from the column that owns it. Sequential rather than alongside
-  // getUserData on purpose: one request holding two pooled connections at once
-  // is what deadlocked this page before (see src/lib/db.ts).
-  const contact = userId ? await getContact(userId) : null;
 
   // Sequential for the same reason as the line above — one request must never
   // hold two pooled connections at once.
@@ -89,7 +83,7 @@ export async function PersonalAreaRoute({
       prefill={parseAlertPrefill(params)}
       account={account}
       delivery={delivery}
-      tier={contact?.tier ?? "free"}
+      tier={account?.tier ?? "free"}
       billing={billing}
       subscriptions={subscriptions.map((subscription) => ({
         id: subscription.id,

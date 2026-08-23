@@ -2,6 +2,7 @@
 
 import { Bookmark } from "lucide-react";
 import { useSavedDeals } from "@/lib/personal-data";
+import { useUpgradeGate } from "@/components/UpgradeGate";
 
 /**
  * Bookmark toggle. Cards and table rows are wrapped in a <Link>, so the click
@@ -17,6 +18,7 @@ export function SaveDealButton({
   className?: string;
 }) {
   const { ids, toggle } = useSavedDeals();
+  const { show } = useUpgradeGate();
   const saved = ids.includes(dealId);
 
   const base =
@@ -33,7 +35,12 @@ export function SaveDealButton({
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        void toggle(dealId);
+        // The gate is checked before anything changes, so the bookmark never
+        // fills in and then empties again — that reads as a broken button
+        // rather than as a plan boundary.
+        void toggle(dealId).then((result) => {
+          if (!result.ok) show(result);
+        });
       }}
       className={`${base} ${tone} ${variant === "icon" ? "h-8 w-8" : "px-3 py-1.5"} ${className}`}
     >

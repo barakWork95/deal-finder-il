@@ -27,7 +27,16 @@ import { upsertContact } from "@/lib/notifications/repository";
  * rows.
  */
 
-export type ActionResult = { ok: true } | { ok: false; reason: "unauthenticated" };
+import type { LimitKind } from "@/lib/limits";
+
+export type ActionResult =
+  | { ok: true }
+  | { ok: false; reason: "unauthenticated" }
+  /**
+   * The plan said no. Carries the numbers because the browser has to explain
+   * the wall, and "failed" with no figures is indistinguishable from a bug.
+   */
+  | { ok: false; reason: "limit"; kind: LimitKind; limit: number; current: number };
 
 async function currentUserId(): Promise<string | null> {
   if (!isAuthConfigured()) return null;
@@ -58,7 +67,9 @@ export async function createAlertAction(alert: Alert): Promise<ActionResult> {
   const userId = await currentUserId();
   if (!userId) return { ok: false, reason: "unauthenticated" };
 
-  await insertAlert(userId, sanitiseAlert(alert));
+  const result = await insertAlert(userId, sanitiseAlert(alert));
+  if (!result.ok) return result;
+
   revalidatePath("/alerts");
   return { ok: true };
 }
@@ -70,7 +81,9 @@ export async function setAlertActiveAction(
   const userId = await currentUserId();
   if (!userId) return { ok: false, reason: "unauthenticated" };
 
-  await setAlertActive(userId, String(alertId).slice(0, 64), isActive);
+  const result = await setAlertActive(userId, String(alertId).slice(0, 64), isActive);
+  if (!result.ok) return result;
+
   revalidatePath("/alerts");
   return { ok: true };
 }
@@ -88,7 +101,9 @@ export async function setDealSavedAction(dealId: string, saved: boolean): Promis
   const userId = await currentUserId();
   if (!userId) return { ok: false, reason: "unauthenticated" };
 
-  await setDealSaved(userId, String(dealId).slice(0, 64), saved);
+  const result = await setDealSaved(userId, String(dealId).slice(0, 64), saved);
+  if (!result.ok) return result;
+
   revalidatePath("/alerts");
   return { ok: true };
 }

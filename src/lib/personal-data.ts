@@ -11,7 +11,9 @@ import {
 import { useAuthState } from "@/components/AuthState";
 import { ALERTS_KEY, useSavedDealIds, useStoredState } from "@/lib/client-store";
 import type { UserData } from "@/lib/user-repository";
-import type { Alert } from "@/lib/types";
+import type { Alert, PlanTier } from "@/lib/types";
+import { isAtLimit, limitFor, type LimitKind } from "@/lib/limits";
+import { trackEvent } from "@/lib/events";
 
 /**
  * One interface over two homes for the same data.
@@ -26,7 +28,28 @@ import type { Alert } from "@/lib/types";
  * only one of them should ever fetch.
  */
 
-const EMPTY: UserData = { alerts: [], savedDealIds: [] };
+const EMPTY: UserData = { alerts: [], savedDealIds: [], tier: "free" };
+
+/**
+ * What a blocked write tells the caller.
+ *
+ * The check happens here rather than in each button, so the wall is hit
+ * *before* anything changes on screen. Doing it optimistically and reverting
+ * would flash a filled bookmark and then take it away, which reads as a bug
+ * rather than a plan boundary — and the server still refuses independently, so
+ * this is a courtesy, not the enforcement.
+ */
+export type MutationResult =
+  | { ok: true }
+  | { ok: false; kind: LimitKind; limit: number; current: number };
+
+const ALLOWED: MutationResult = { ok: true };
+
+/** One place decides, and one place reports it to the funnel. */
+function block(kind: LimitKind, tier: PlanTier, current: number): MutationResult {
+  trackEvent("limit_hit", { kind, tier, current });
+  return { ok: false, kind, limit: limitFor(tier, kind) ?? 0, current };
+}
 
 let account: UserData | null = null; // null = not loaded yet
 let inFlight: Promise<void> | null = null;
@@ -68,17 +91,40 @@ function load() {
     });
 }
 
-/** Applies a change locally first, then lets the server confirm it. */
-async function mutate(change: (prev: UserData) => UserData, action: () => Promise<unknown>) {
+/**
+ * Applies a change locally first, then lets the server confirm it.
+ *
+ * A refusal is not only an exception. The server re-checks every limit against
+ * the real rows, so it can legitimately say no when this browser's mirror is
+ * stale — two tabs, or another device. That answer has to revert the optimistic
+ * update exactly as a thrown error does, or the screen keeps showing something
+ * the database never accepted.
+ */
+async function mutate(
+  change: (prev: UserData) => UserData,
+  action: () => Promise<{ ok: boolean; reason?: string } | unknown>,
+): Promise<MutationResult> {
   const before = account ?? EMPTY;
   account = change(before);
   emit();
   try {
-    await action();
+    const result = (await action()) as
+      | { ok: false; reason: "limit"; kind: LimitKind; limit: number; current: number }
+      | { ok: boolean; reason?: string };
+
+    if (result && result.ok === false) {
+      account = before;
+      emit();
+      if ("kind" in result && result.reason === "limit") {
+        trackEvent("limit_hit", { kind: result.kind, tier: before.tier, current: result.current });
+        return { ok: false, kind: result.kind, limit: result.limit, current: result.current };
+      }
+    }
   } catch {
     account = before; // put the UI back rather than lie about what was saved
     emit();
   }
+  return ALLOWED;
 }
 
 function useAccount(initial?: UserData): UserData | null {
@@ -113,28 +159,45 @@ export function usePersonalAlerts(initial?: UserData) {
   // Both hooks always run; only the result is chosen.
   const alerts = signedIn ? (accountData?.alerts ?? initial?.alerts ?? NO_ALERTS) : localAlerts;
 
+  // A signed-out visitor is on the free plan too — the limits are the product's,
+  // not the account system's, so guest mode is held to the same numbers.
+  const tier: PlanTier = signedIn ? (accountData?.tier ?? initial?.tier ?? "free") : "free";
+  const activeCount = alerts.filter((a) => a.isActive !== false).length;
+
   const create = useCallback(
-    (alert: Alert) => {
-      if (!signedIn) return setLocalAlerts((prev) => [alert, ...prev]);
+    async (alert: Alert): Promise<MutationResult> => {
+      if (isAtLimit(tier, "alerts", activeCount)) return block("alerts", tier, activeCount);
+
+      if (!signedIn) {
+        setLocalAlerts((prev) => [alert, ...prev]);
+        return ALLOWED;
+      }
       return mutate(
         (prev) => ({ ...prev, alerts: [alert, ...prev.alerts] }),
         () => createAlertAction(alert),
       );
     },
-    [signedIn, setLocalAlerts],
+    [signedIn, setLocalAlerts, tier, activeCount],
   );
 
   const setActive = useCallback(
-    (id: string, isActive: boolean) => {
+    async (id: string, isActive: boolean): Promise<MutationResult> => {
+      // Pausing is always allowed — it is how someone gets back under the line.
+      // Un-pausing is the same act as adding one, and is gated the same way.
+      if (isActive && isAtLimit(tier, "alerts", activeCount)) {
+        return block("alerts", tier, activeCount);
+      }
+
       if (!signedIn) {
-        return setLocalAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, isActive } : a)));
+        setLocalAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, isActive } : a)));
+        return ALLOWED;
       }
       return mutate(
         (prev) => ({ ...prev, alerts: prev.alerts.map((a) => (a.id === id ? { ...a, isActive } : a)) }),
         () => setAlertActiveAction(id, isActive),
       );
     },
-    [signedIn, setLocalAlerts],
+    [signedIn, setLocalAlerts, tier, activeCount],
   );
 
   const remove = useCallback(
@@ -148,7 +211,7 @@ export function usePersonalAlerts(initial?: UserData) {
     [signedIn, setLocalAlerts],
   );
 
-  return { alerts, create, setActive, remove, signedIn };
+  return { alerts, create, setActive, remove, signedIn, tier, activeCount };
 }
 
 // ── Saved tenders ──────────────────────────────────────────
@@ -161,15 +224,23 @@ export function useSavedDeals(initial?: UserData) {
   const accountData = useAccount(initial);
 
   const ids = signedIn ? (accountData?.savedDealIds ?? initial?.savedDealIds ?? NO_IDS) : localIds;
+  const tier: PlanTier = signedIn ? (accountData?.tier ?? initial?.tier ?? "free") : "free";
 
   const toggle = useCallback(
-    (dealId: string) => {
-      const saved = !(signedIn ? (account?.savedDealIds ?? NO_IDS) : localIds).includes(dealId);
+    async (dealId: string): Promise<MutationResult> => {
+      const current = signedIn ? (account?.savedDealIds ?? NO_IDS) : localIds;
+      const saved = !current.includes(dealId);
+
+      // Removing is never blocked; only adding one more can be.
+      if (saved && isAtLimit(tier, "saved", current.length)) {
+        return block("saved", tier, current.length);
+      }
 
       if (!signedIn) {
-        return setLocalIds((prev) =>
+        setLocalIds((prev) =>
           prev.includes(dealId) ? prev.filter((x) => x !== dealId) : [dealId, ...prev],
         );
+        return ALLOWED;
       }
       return mutate(
         (prev) => ({
@@ -181,7 +252,7 @@ export function useSavedDeals(initial?: UserData) {
         () => setDealSavedAction(dealId, saved),
       );
     },
-    [signedIn, localIds, setLocalIds],
+    [signedIn, localIds, setLocalIds, tier],
   );
 
   const remove = useCallback(
@@ -195,7 +266,7 @@ export function useSavedDeals(initial?: UserData) {
     [signedIn, setLocalIds],
   );
 
-  return { ids, toggle, remove, signedIn };
+  return { ids, toggle, remove, signedIn, tier };
 }
 
 /** Lets UserSync drop the stale mirror after its one-time upload merge. */
