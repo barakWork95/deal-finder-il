@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { Check, Crown, Info, Minus, ShieldCheck, Sparkles } from "lucide-react";
 import { trackEvent } from "@/lib/events";
-import type { PlanTier } from "@/lib/types";
+import type { BillingOffer, BillingSummary, PlanTier } from "@/lib/types";
+import { PayPalSubscribeButton } from "@/components/billing/PayPalSubscribeButton";
 
 type Plan = {
   key: "free" | "pro";
@@ -47,9 +48,25 @@ const PLANS: Plan[] = [
   },
 ];
 
-export function BillingPanel({ tier = "free" }: { tier?: PlanTier }) {
+export function BillingPanel({
+  tier = "free",
+  billing,
+  subscriptions = [],
+}: {
+  tier?: PlanTier;
+  /** Resolved server-side: the browser must not decide whether we can charge. */
+  billing?: BillingOffer;
+  subscriptions?: BillingSummary[];
+}) {
   const [notice, setNotice] = useState(false);
+  const [cancelling, setCancelling] = useState<string | null>(null);
   const isPro = tier === "pro";
+
+  const canCheckout = billing?.configured === true;
+  // "Live" means money actually moves. Sandbox is a real button over play
+  // money, and the difference has to be visible on the page — see the banner.
+  const live = canCheckout && billing?.sandbox === false;
+  const active = subscriptions.find((s) => s.status === "ACTIVE");
 
   /**
    * How many people reach the pricing table at all — the denominator without
@@ -76,14 +93,33 @@ export function BillingPanel({ tier = "free" }: { tier?: PlanTier }) {
         </p>
       </div>
 
-      <p className="flex items-start gap-2 rounded-lg border border-accent/30 bg-accent-soft p-3 text-[11px] leading-relaxed text-muted">
-        <Sparkles size={14} className="mt-px shrink-0 text-accent" />
-        <span>
-          בתקופת ההרצה <span className="font-semibold text-primary">כל היכולות פתוחות לכולם</span> ללא
-          תשלום, וללא המגבלות המופיעות במסלול החינם. הטבלה מתארת את המסלולים כפי שייכנסו לתוקף
-          בהמשך.
-        </span>
-      </p>
+      {/* This paragraph is the one thing on the page that must never lag
+          behind reality. While nothing could be bought it said everything was
+          free, which was true. The moment a real charge is possible, that
+          sentence would be describing a product we are taking money for — so
+          it changes with the checkout, not on a later pass. */}
+      {live ? (
+        <p className="flex items-start gap-2 rounded-lg border border-accent/30 bg-accent-soft p-3 text-[11px] leading-relaxed text-muted">
+          <Sparkles size={14} className="mt-px shrink-0 text-accent" />
+          <span>
+            מנוי PRO פעיל לרכישה. ההבדל בפועל היום:{" "}
+            <span className="font-semibold text-primary">
+              התראות מיידיות ב-WhatsApp ובאימייל
+            </span>{" "}
+            למנויי PRO, מול סיכום יומי בהשהיה במסלול החינם. שאר המגבלות המופיעות בטבלה עדיין אינן
+            נאכפות, וכולן פתוחות לכל המשתמשים.
+          </span>
+        </p>
+      ) : (
+        <p className="flex items-start gap-2 rounded-lg border border-accent/30 bg-accent-soft p-3 text-[11px] leading-relaxed text-muted">
+          <Sparkles size={14} className="mt-px shrink-0 text-accent" />
+          <span>
+            בתקופת ההרצה <span className="font-semibold text-primary">כל היכולות פתוחות לכולם</span>{" "}
+            ללא תשלום, וללא המגבלות המופיעות במסלול החינם. הטבלה מתארת את המסלולים כפי שייכנסו
+            לתוקף בהמשך.
+          </span>
+        </p>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         {PLANS.map((plan) => {
@@ -128,9 +164,36 @@ export function BillingPanel({ tier = "free" }: { tier?: PlanTier }) {
 
               <div className="mt-5">
                 {pro && isPro ? (
-                  <div className="rounded-lg border border-accent bg-accent-soft px-4 py-2.5 text-center text-sm font-semibold text-accent">
-                    המסלול הנוכחי שלך
+                  <div className="space-y-2">
+                    <div className="rounded-lg border border-accent bg-accent-soft px-4 py-2.5 text-center text-sm font-semibold text-accent">
+                      המסלול הנוכחי שלך
+                    </div>
+                    {active && (
+                      <button
+                        type="button"
+                        disabled={cancelling === active.id}
+                        onClick={async () => {
+                          setCancelling(active.id);
+                          // No confirm dialog and no retention flow: "ביטול
+                          // בכל עת" on the same page has to mean this button.
+                          await fetch(
+                            `/api/billing/paypal/subscription/${active.id}/cancel`,
+                            { method: "POST" },
+                          ).catch(() => {});
+                          window.location.reload();
+                        }}
+                        className="w-full rounded-lg border border-border px-4 py-2 text-xs font-semibold text-muted transition hover:border-negative hover:text-negative disabled:opacity-50"
+                      >
+                        {cancelling === active.id ? "מבטלים…" : "ביטול המנוי"}
+                      </button>
+                    )}
                   </div>
+                ) : pro && canCheckout && billing ? (
+                  <PayPalSubscribeButton
+                    clientId={billing.clientId}
+                    currency={billing.currency}
+                    sandbox={billing.sandbox}
+                  />
                 ) : pro ? (
                   <>
                     <button

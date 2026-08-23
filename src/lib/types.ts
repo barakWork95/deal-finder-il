@@ -181,3 +181,25 @@ export interface Alert {
  * name it without importing anything server-only.
  */
 export type PlanTier = "free" | "pro";
+
+/**
+ * What the billing panel needs to know about a subscription. Deliberately a
+ * client-safe shape rather than the repository's row: the panel is a client
+ * component and must not reach into a server-only module for a type.
+ */
+export type BillingSummary = {
+  id: string;
+  status: string;
+  currentPeriodEnd: string | null;
+  cancelledAt: string | null;
+};
+
+/** What the browser needs in order to offer checkout at all. */
+export type BillingOffer = {
+  configured: boolean;
+  /** Sandbox credentials — real button, play money. */
+  sandbox: boolean;
+  clientId: string;
+  currency: string;
+  price: number;
+};

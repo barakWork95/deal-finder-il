@@ -6,7 +6,7 @@ import type { Deal } from "@/lib/types";
 import type { AlertPrefill, PersonalTab } from "@/lib/alert-prefill";
 import { usePersonalAlerts, useSavedDeals } from "@/lib/personal-data";
 import type { UserData } from "@/lib/user-repository";
-import type { PlanTier } from "@/lib/types";
+import type { BillingOffer, BillingSummary, PlanTier } from "@/lib/types";
 import { trackEvent } from "@/lib/events";
 import { AlertsPanel } from "@/components/personal/AlertsPanel";
 import { SavedDealsPanel } from "@/components/personal/SavedDealsPanel";
@@ -31,6 +31,8 @@ export function PersonalArea({
   account,
   delivery,
   tier = "free",
+  billing,
+  subscriptions,
 }: {
   deals: Deal[];
   cities: string[];
@@ -45,6 +47,9 @@ export function PersonalArea({
    * guest is always "free" — there is no account to carry a plan.
    */
   tier?: PlanTier;
+  /** Whether checkout can be offered — decided server-side, like `delivery`. */
+  billing?: BillingOffer;
+  subscriptions?: BillingSummary[];
 }) {
   const [tab, setTab] = useState<TabKey>(initialTab);
 
@@ -152,7 +157,9 @@ export function PersonalArea({
             )}
           {tab === "saved" && <SavedDealsPanel deals={deals} account={account} />}
           {tab === "account" && <AccountPanel />}
-            {tab === "billing" && <BillingPanel tier={tier} />}
+            {tab === "billing" && (
+              <BillingPanel tier={tier} billing={billing} subscriptions={subscriptions} />
+            )}
           </div>
         </div>
       </div>
