@@ -12,7 +12,7 @@ import { useAuthState } from "@/components/AuthState";
 import { ALERTS_KEY, useSavedDealIds, useStoredState } from "@/lib/client-store";
 import type { UserData } from "@/lib/user-repository";
 import type { Alert, PlanTier } from "@/lib/types";
-import { isAtLimit, limitFor, type LimitKind } from "@/lib/limits";
+import { isAlertScoreLocked, isAtLimit, limitFor, type LimitKind, type ProFeature } from "@/lib/limits";
 import { trackEvent } from "@/lib/events";
 
 /**
@@ -41,7 +41,8 @@ const EMPTY: UserData = { alerts: [], savedDealIds: [], tier: "free" };
  */
 export type MutationResult =
   | { ok: true }
-  | { ok: false; kind: LimitKind; limit: number; current: number };
+  | { ok: false; kind: LimitKind; limit: number; current: number }
+  | { ok: false; feature: ProFeature };
 
 const ALLOWED: MutationResult = { ok: true };
 
@@ -49,6 +50,12 @@ const ALLOWED: MutationResult = { ok: true };
 function block(kind: LimitKind, tier: PlanTier, current: number): MutationResult {
   trackEvent("limit_hit", { kind, tier, current });
   return { ok: false, kind, limit: limitFor(tier, kind) ?? 0, current };
+}
+
+/** The same, for a capability the plan does not include at all. */
+function blockFeature(feature: ProFeature, tier: PlanTier): MutationResult {
+  trackEvent("limit_hit", { kind: feature, tier });
+  return { ok: false, feature };
 }
 
 let account: UserData | null = null; // null = not loaded yet
@@ -141,6 +148,7 @@ async function mutate(
   try {
     const result = (await action()) as
       | { ok: false; reason: "limit"; kind: LimitKind; limit: number; current: number }
+      | { ok: false; reason: "pro_feature"; feature: ProFeature }
       | { ok: boolean; reason?: string };
 
     if (result && result.ok === false) {
@@ -149,6 +157,10 @@ async function mutate(
       if ("kind" in result && result.reason === "limit") {
         trackEvent("limit_hit", { kind: result.kind, tier: before.tier, current: result.current });
         return { ok: false, kind: result.kind, limit: result.limit, current: result.current };
+      }
+      if ("feature" in result && result.reason === "pro_feature") {
+        trackEvent("limit_hit", { kind: result.feature, tier: before.tier });
+        return { ok: false, feature: result.feature };
       }
     }
   } catch {
@@ -212,6 +224,10 @@ export function usePersonalAlerts(initial?: UserData) {
   const create = useCallback(
     async (alert: Alert): Promise<MutationResult> => {
       if (isAtLimit(tier, "alerts", activeCount)) return block("alerts", tier, activeCount);
+      // Checked before the quota is spent, so a refused alert costs nothing.
+      if (isAlertScoreLocked(tier, alert.filters?.minScore)) {
+        return blockFeature("score_filter", tier);
+      }
 
       if (!signedIn) {
         setLocalAlerts((prev) => [alert, ...prev]);

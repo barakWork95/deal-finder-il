@@ -1,7 +1,15 @@
 import "server-only";
 import { sql, hasDb } from "./db";
 import type { Alert, AlertChannel, AlertFrequency, PlanTier } from "./types";
-import { headroom, isAtLimit, limitFor, type LimitKind } from "./limits";
+import {
+  FREE_MAX_ALERT_SCORE,
+  headroom,
+  isAlertScoreLocked,
+  isAtLimit,
+  limitFor,
+  type LimitKind,
+  type ProFeature,
+} from "./limits";
 
 /**
  * Per-user alerts and saved tenders (db/010_user_data.sql).
@@ -24,7 +32,9 @@ const EMPTY: UserData = { alerts: [], savedDealIds: [], tier: "free" };
  */
 export type WriteResult =
   | { ok: true }
-  | { ok: false; reason: "limit"; kind: LimitKind; limit: number; current: number };
+  | { ok: false; reason: "limit"; kind: LimitKind; limit: number; current: number }
+  /** A capability the plan does not include, as against a quota it has used up. */
+  | { ok: false; reason: "pro_feature"; feature: ProFeature };
 
 /** The plan on the account. Absent contact row = free, like everywhere else. */
 export async function tierOf(clerkUserId: string): Promise<PlanTier> {
@@ -92,6 +102,15 @@ export async function insertAlert(clerkUserId: string, alert: Alert): Promise<Wr
   // place before the row exists: the action, the sync endpoint and any future
   // caller all funnel through it.
   const tier = await tierOf(clerkUserId);
+
+  // A score threshold above the free ceiling is the paid filter by another
+  // route: an alert is exactly "automatic filtering", which is what the
+  // pricing table gates. Only *creating* one is refused — an alert that
+  // already carries a high threshold keeps it and keeps running.
+  if (isAlertScoreLocked(tier, alert.filters?.minScore)) {
+    return { ok: false, reason: "pro_feature", feature: "score_filter" };
+  }
+
   if (alert.isActive !== false) {
     const current = await activeAlertCount(clerkUserId);
     if (isAtLimit(tier, "alerts", current)) {
@@ -197,13 +216,23 @@ export async function mergeUserData(clerkUserId: string, incoming: UserData): Pr
 
   let alertRoom = headroom(tier, "alerts", await activeAlertCount(clerkUserId));
 
-  for (const alert of incoming.alerts) {
+  for (const incomingAlert of incoming.alerts) {
+    let alert = incomingAlert;
     const isNew = !existingIds.has(alert.id);
     const wantsActive = alert.isActive !== false;
 
     if (isNew && wantsActive && alertRoom != null) {
       if (alertRoom <= 0) continue; // over the plan: leave it in the browser
       alertRoom -= 1;
+    }
+
+    // A new alert arriving from a browser cannot be told apart from one
+    // crafted by hand, so a free account's threshold is lowered to the
+    // ceiling rather than trusted. Lowered, not rejected: the alert still
+    // lands and still runs, it just stops carrying the paid filter. Alerts
+    // already in the account are never rewritten — `isNew` is the guard.
+    if (isNew && isAlertScoreLocked(tier, alert.filters?.minScore)) {
+      alert = { ...alert, filters: { ...alert.filters, minScore: FREE_MAX_ALERT_SCORE } };
     }
     await sql`
       INSERT INTO user_alerts
