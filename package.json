@@ -19,7 +19,8 @@
     "db:refresh-premium": "psql \"${DATABASE_URL}\" -v ON_ERROR_STOP=1 -f db/008_premium_score_refresh.sql",
     "db:sync-phase": "node db/sync-tender-phase.mjs",
     "probe:rami": "node db/probe-rami.mjs",
-    "paypal:plan": "node scripts/paypal-plan.mjs"
+    "paypal:plan": "node scripts/paypal-plan.mjs",
+    "test": "node --test src/lib/*.test.ts"
   },
   "dependencies": {
     "@clerk/localizations": "^4.15.1",

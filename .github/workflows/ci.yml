@@ -28,6 +28,12 @@ jobs:
 
       - run: npm run lint
 
+      # The plan rules, which failed silently once: PRO's limits are `null` for
+      # "unlimited", a `??` fallback read that as missing, and paying accounts
+      # were held to the free limits. Nothing broke loudly — it built, it
+      # typechecked, it rendered. Hence a test rather than a comment.
+      - run: npm test
+
       # No DATABASE_URL or Clerk keys here on purpose: the repository layer
       # falls back to mock data without one (src/lib/repository.ts), auth is
       # guarded by isAuthConfigured (src/lib/auth.ts), and every page that
