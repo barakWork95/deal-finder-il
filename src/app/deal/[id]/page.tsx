@@ -11,6 +11,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { getDealById } from "@/lib/repository";
+import { currentTier } from "@/lib/plan";
 import {
   formatDate,
   formatILS,
@@ -30,6 +31,10 @@ export default async function DealDetailPage({ params }: PageProps<"/deal/[id]">
   const { id } = await params;
   const deal = await getDealById(id);
   if (!deal) notFound();
+
+  // Sequential, never alongside the query above — one request holding two
+  // pooled connections at once is how this app deadlocked its pool before.
+  const tier = await currentTier();
 
   const submission = submissionInfo(deal);
   const subjectPerSqm = Math.round(deal.askingPrice / deal.areaSqm);
@@ -280,7 +285,7 @@ export default async function DealDetailPage({ params }: PageProps<"/deal/[id]">
             </p>
           </div>
 
-          <WinningPremium deal={deal} />
+          <WinningPremium deal={deal} tier={tier} />
 
           <LandCalculator
             purchasePrice={deal.askingPrice}

@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import Link from "next/link";
 import { Crown, X } from "lucide-react";
-import { LIMIT_COPY, type LimitKind } from "@/lib/limits";
+import { FEATURE_COPY, LIMIT_COPY, type LimitKind, type ProFeature } from "@/lib/limits";
 import { trackEvent } from "@/lib/events";
 
 /**
@@ -17,7 +17,16 @@ import { trackEvent } from "@/lib/events";
  * component was refused, and says so.
  */
 
-type Blocked = { kind: LimitKind; limit: number; current: number };
+/**
+ * Two reasons to be stopped, and they read differently.
+ *
+ * A quota carries numbers — "three of three" is the whole explanation. A
+ * capability has none: it is simply not in the free plan, and inventing a
+ * count for it would make the copy worse.
+ */
+type Blocked =
+  | { kind: LimitKind; limit: number; current: number }
+  | { feature: ProFeature };
 
 type GateApi = { show: (blocked: Blocked) => void };
 
@@ -41,7 +50,15 @@ export function UpgradeGateProvider({ children }: { children: React.ReactNode })
 }
 
 function UpgradeModal({ blocked, onClose }: { blocked: Blocked; onClose: () => void }) {
-  const copy = LIMIT_COPY[blocked.kind];
+  // Narrowed inline rather than through a helper variable: TypeScript only
+  // discriminates the union at the point of the `in` check.
+  const copy =
+    "kind" in blocked
+      ? { title: LIMIT_COPY[blocked.kind].title, body: LIMIT_COPY[blocked.kind].body(blocked.limit) }
+      : FEATURE_COPY[blocked.feature];
+
+  const quota = "kind" in blocked ? blocked : null;
+  const reason = "kind" in blocked ? blocked.kind : blocked.feature;
 
   // Escape closes it. A modal that can only be dismissed by finding the small
   // × is a modal people resent.
@@ -83,14 +100,17 @@ function UpgradeModal({ blocked, onClose }: { blocked: Blocked; onClose: () => v
           {copy.title}
         </h2>
 
-        <p className="mt-2 text-sm leading-relaxed text-muted">{copy.body(blocked.limit)}</p>
+        <p className="mt-2 text-sm leading-relaxed text-muted">{copy.body}</p>
 
-        <div className="mt-4 rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-muted">
-          כרגע יש לך{" "}
-          <span className="num font-bold text-primary">{blocked.current}</span>
-          {blocked.kind === "alerts" ? " התראות פעילות" : " עסקאות שמורות"} · מגבלת המסלול:{" "}
-          <span className="num font-bold text-primary">{blocked.limit}</span>
-        </div>
+        {/* Only a quota has a count worth showing. */}
+        {quota && (
+          <div className="mt-4 rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs text-muted">
+            כרגע יש לך{" "}
+            <span className="num font-bold text-primary">{quota.current}</span>
+            {quota.kind === "alerts" ? " התראות פעילות" : " עסקאות שמורות"} · מגבלת המסלול:{" "}
+            <span className="num font-bold text-primary">{quota.limit}</span>
+          </div>
+        )}
 
         <div className="mt-5 flex flex-col gap-2 sm:flex-row-reverse">
           <Link
@@ -98,7 +118,7 @@ function UpgradeModal({ blocked, onClose }: { blocked: Blocked; onClose: () => v
             onClick={() => {
               // Reaching the pricing table from a wall is a different intent
               // from browsing to it, and the funnel should be able to tell.
-              trackEvent("plan_compare_click", { from: "limit_gate", kind: blocked.kind });
+              trackEvent("plan_compare_click", { from: "limit_gate", kind: reason });
               onClose();
             }}
             className="btn-primary inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-110"
