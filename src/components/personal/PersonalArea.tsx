@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Bell, Bookmark, CreditCard, User, type LucideIcon } from "lucide-react";
 import type { Deal } from "@/lib/types";
 import type { AlertPrefill, PersonalTab } from "@/lib/alert-prefill";
-import { usePersonalAlerts, useSavedDeals } from "@/lib/personal-data";
+import { usePersonalAlerts, useSavedDeals, useServerTier } from "@/lib/personal-data";
 import type { UserData } from "@/lib/user-repository";
 import type { BillingOffer, BillingSummary, PlanTier } from "@/lib/types";
 import { trackEvent } from "@/lib/events";
@@ -52,6 +52,10 @@ export function PersonalArea({
   subscriptions?: BillingSummary[];
 }) {
   const [tab, setTab] = useState<TabKey>(initialTab);
+
+  // Server-resolved on every request, so it is the authority over anything the
+  // shared store cached earlier in this tab.
+  useServerTier(tier);
 
   /**
    * Keep the URL in step so the current tab can be shared or reloaded. This

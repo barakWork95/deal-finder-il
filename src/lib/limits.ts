@@ -21,7 +21,17 @@ export const PLAN_LIMITS: Record<PlanTier, Record<LimitKind, number | null>> = {
 };
 
 export function limitFor(tier: PlanTier, kind: LimitKind): number | null {
-  return PLAN_LIMITS[tier]?.[kind] ?? PLAN_LIMITS.free[kind];
+  // Fall back to the free *plan*, never to a free *value*.
+  //
+  // This was `PLAN_LIMITS[tier]?.[kind] ?? PLAN_LIMITS.free[kind]`, which reads
+  // as "an unknown plan is treated as free" and is — except that PRO's limits
+  // are deliberately `null` for "unlimited", and `??` cannot tell an
+  // intentional null from a missing one. So every PRO lookup fell through to
+  // the free number and paying accounts were held to 2 alerts and 3 saved
+  // tenders. The guard against an unknown tier has to be applied to the plan
+  // it selects, not to the answer it returns.
+  const plan = PLAN_LIMITS[tier] ?? PLAN_LIMITS.free;
+  return plan[kind];
 }
 
 /**

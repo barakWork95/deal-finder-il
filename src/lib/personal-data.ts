@@ -55,6 +55,35 @@ let account: UserData | null = null; // null = not loaded yet
 let inFlight: Promise<void> | null = null;
 const listeners = new Set<() => void>();
 
+/**
+ * The server payload this mirror was last built from.
+ *
+ * Without it the mirror was written once per tab and never again — `load()`
+ * returns early whenever `account` is set, and `seed()` only ran when it was
+ * empty. That was survivable while the mirror held only alerts and saved ids,
+ * which the client mutates itself and therefore keeps current. It stopped
+ * being survivable when the plan moved in here: an account upgraded in another
+ * tab kept its old `tier` for the life of this one, so the billing panel (which
+ * reads the fresh server prop) said PRO while the alerts panel (which reads
+ * this) still enforced the free limit.
+ *
+ * A server render is by definition newer than anything cached here, so its
+ * payload is adopted whenever it is a different one.
+ */
+let seededFrom: UserData | null = null;
+
+/**
+ * The plan, as last resolved by a server render — on any page, not only the
+ * ones that hand down a full UserData. The feed knows the tier (it gates the
+ * score filter with it) but passes no account data, and the bookmark button
+ * there still has to know whether the saved-deals limit applies.
+ *
+ * Written only from an effect. This module is evaluated during SSR too, where
+ * module scope is shared between requests, so a value written during render
+ * would leak one visitor's plan into another's page.
+ */
+let knownTier: PlanTier | null = null;
+
 function emit() {
   for (const l of listeners) l();
 }
@@ -73,6 +102,8 @@ function seed(data: UserData) {
 function reset() {
   account = null;
   inFlight = null;
+  seededFrom = null;
+  knownTier = null;
   emit();
 }
 
@@ -140,8 +171,17 @@ function useAccount(initial?: UserData): UserData | null {
       if (account) reset();
       return;
     }
-    if (initial && !account) seed(initial);
-    else load();
+    // A server render is newer than the mirror, always. Adopt it whenever it
+    // is one we have not adopted yet — identity is enough, since each render
+    // produces a fresh object — and otherwise leave the optimistic state be.
+    if (initial) {
+      if (initial !== seededFrom) {
+        seededFrom = initial;
+        seed(initial);
+      }
+      return;
+    }
+    load();
   }, [signedIn, initial]);
 
   return signedIn ? snapshot : null;
@@ -161,7 +201,12 @@ export function usePersonalAlerts(initial?: UserData) {
 
   // A signed-out visitor is on the free plan too — the limits are the product's,
   // not the account system's, so guest mode is held to the same numbers.
-  const tier: PlanTier = signedIn ? (accountData?.tier ?? initial?.tier ?? "free") : "free";
+  // Freshest first: this render's server payload, then whatever the last
+  // server render told us, then the mirror. Nothing client-side ever changes a
+  // plan, so a server answer is never staler than a cached one.
+  const tier: PlanTier = signedIn
+    ? (initial?.tier ?? knownTier ?? accountData?.tier ?? "free")
+    : "free";
   const activeCount = alerts.filter((a) => a.isActive !== false).length;
 
   const create = useCallback(
@@ -224,7 +269,9 @@ export function useSavedDeals(initial?: UserData) {
   const accountData = useAccount(initial);
 
   const ids = signedIn ? (accountData?.savedDealIds ?? initial?.savedDealIds ?? NO_IDS) : localIds;
-  const tier: PlanTier = signedIn ? (accountData?.tier ?? initial?.tier ?? "free") : "free";
+  const tier: PlanTier = signedIn
+    ? (initial?.tier ?? knownTier ?? accountData?.tier ?? "free")
+    : "free";
 
   const toggle = useCallback(
     async (dealId: string): Promise<MutationResult> => {
@@ -273,5 +320,22 @@ export function useSavedDeals(initial?: UserData) {
 export function refreshAccount() {
   account = null;
   inFlight = null;
+  seededFrom = null;
   load();
+}
+
+/**
+ * Tells the store the plan a server render resolved.
+ *
+ * Call it from any page that already knows — it costs nothing when the answer
+ * has not changed, and it is what keeps the bookmark button on the feed from
+ * enforcing a limit the visitor is no longer subject to.
+ */
+export function useServerTier(tier?: PlanTier) {
+  useEffect(() => {
+    if (!tier || tier === knownTier) return;
+    knownTier = tier;
+    if (account) account = { ...account, tier };
+    emit();
+  }, [tier]);
 }

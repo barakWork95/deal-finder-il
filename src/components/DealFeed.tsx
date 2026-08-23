@@ -20,6 +20,7 @@ import { DEAL_TYPE_LABEL, formatILS, formatILSCompact, formatLandArea } from "@/
 import { FILTERABLE_PHASES, PHASE_LABEL, matchesPhase, submissionInfo, tenderPhase } from "@/lib/tender-phase";
 import { DealBadge, DealTypeChip, ScoreChip, DiscountTag } from "@/components/ui";
 import { hasFeature, isScorePresetLocked } from "@/lib/limits";
+import { useServerTier } from "@/lib/personal-data";
 import { useUpgradeGate } from "@/components/UpgradeGate";
 import { trackEvent } from "@/lib/events";
 import type { PlanTier } from "@/lib/types";
@@ -72,6 +73,9 @@ export function DealFeed({
   tier?: PlanTier;
 }) {
   const { show } = useUpgradeGate();
+  // The bookmark button on every row enforces the saved-deals limit from the
+  // shared store, which has no other way to learn the plan on this page.
+  useServerTier(tier);
   // The server already stripped the numbers for a free account; this is only
   // about saying *why* the column is empty.
   const premiumLocked = !hasFeature(tier, "premium_calculator");
