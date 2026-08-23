@@ -1,15 +1,28 @@
 import { Gavel, TrendingUp, Info } from "lucide-react";
 import { formatILS } from "@/lib/format";
-import type { Deal } from "@/lib/types";
+import type { Deal, PlanTier } from "@/lib/types";
+import { hasFeature } from "@/lib/limits";
+import { ProFeatureLock } from "@/components/ProFeatureLock";
 
 /**
  * "פרמיית זכייה" — RMI minimum bids are low anchors, so the headline gap vs
  * the שומה is not what a bidder actually pays. This projects the likely
  * winning price from how much past winners in the same city+zoning paid over
  * the minimum, and judges it against the official appraisal.
+ *
+ * The projection itself is the PRO half. A free account still sees that the
+ * calculation exists, what it is built from and how many past tenders back it
+ * — enough to judge whether it is worth paying for — but not the two numbers
+ * that are the product: the premium and the expected winning price.
+ *
+ * Those are omitted from the render, not hidden with CSS. A blurred value is
+ * still in the page for anyone who opens devtools, which would make the gate
+ * decorative.
  */
-export function WinningPremium({ deal }: { deal: Deal }) {
+export function WinningPremium({ deal, tier = "free" }: { deal: Deal; tier?: PlanTier }) {
   if (deal.winningPremium == null || deal.expectedWinningPrice == null) return null;
+
+  const pro = hasFeature(tier, "premium_calculator");
 
   const premiumPct = Math.round(deal.winningPremium * 100);
   const expected = deal.expectedWinningPrice;
@@ -26,12 +39,14 @@ export function WinningPremium({ deal }: { deal: Deal }) {
         <h3 className="text-sm font-bold text-primary">פרמיית זכייה חזויה</h3>
       </div>
 
-      <div className="mb-3 flex items-baseline gap-2">
-        <span className="num text-3xl font-black text-accent" dir="ltr">
-          +{premiumPct}%
-        </span>
-        <span className="text-xs text-muted">מעל מחיר המינימום</span>
-      </div>
+      {pro && (
+        <div className="mb-3 flex items-baseline gap-2">
+          <span className="num text-3xl font-black text-accent" dir="ltr">
+            +{premiumPct}%
+          </span>
+          <span className="text-xs text-muted">מעל מחיר המינימום</span>
+        </div>
+      )}
 
       <p className="mb-3 text-[11px] leading-relaxed text-muted">
         מבוסס על <span className="num font-semibold text-primary">{deal.winningPremiumN}</span> מכרזי
@@ -47,6 +62,14 @@ export function WinningPremium({ deal }: { deal: Deal }) {
         <Row label="שומה רשמית" value={formatILS(appraisal)} />
       </div>
 
+      {!pro ? (
+        <div className="mt-3">
+          <ProFeatureLock
+            feature="premium_calculator"
+            label="פרמיית זכייה ומחיר זכייה חזוי"
+          />
+        </div>
+      ) : (
       <div
         className={`mt-3 rounded-lg border p-3 text-center ${
           stillUnder ? "border-positive/40 bg-positive-soft" : "border-warning/40 bg-warning-soft"
@@ -68,8 +91,9 @@ export function WinningPremium({ deal }: { deal: Deal }) {
           </div>
         )}
       </div>
+      )}
 
-      {thin && (
+      {pro && thin && (
         <p className="mt-2 flex items-start gap-1 text-[10px] leading-tight text-faint">
           <Info size={11} className="mt-0.5 shrink-0" />
           מדגם קטן — יש להתייחס לתחזית בזהירות.

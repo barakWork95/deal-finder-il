@@ -64,3 +64,49 @@ export const LIMIT_COPY: Record<LimitKind, { title: string; body: (limit: number
       `כדי לשמור עוד אפשר להסיר אחת מהן, או לעבור ל-PRO ללא הגבלה.`,
   },
 };
+
+// ── Capability gates ───────────────────────────────────────
+//
+// Separate from the quotas above, and deliberately a different shape. A quota
+// is "you have three of a thing you may have three of" and needs numbers to
+// explain itself. A capability is simply not part of the free plan, and
+// pretending it has a count would make the copy worse, not better.
+
+export type ProFeature = "score_filter" | "premium_calculator";
+
+/**
+ * Every gated capability is PRO-only, so this does not branch on which one —
+ * it takes the feature anyway so call sites read as a question about that
+ * feature, and so a future plan that unlocks one but not another is a change
+ * here rather than at twenty call sites.
+ */
+export function hasFeature(tier: PlanTier, feature: ProFeature): boolean {
+  return tier === "pro" && FEATURE_COPY[feature] !== undefined;
+}
+
+/**
+ * The score presets a free account may use. 60+ stays open because the feed
+ * has to be useful without paying — what PRO buys is the sharp end of it,
+ * which is exactly what the pricing table has been promising ("סינון אוטומטי
+ * לפי ציון עסקה 80+").
+ */
+export const FREE_MAX_SCORE_FILTER = 60;
+
+export function isScorePresetLocked(tier: PlanTier, preset: number): boolean {
+  return !hasFeature(tier, "score_filter") && preset > FREE_MAX_SCORE_FILTER;
+}
+
+export const FEATURE_COPY: Record<ProFeature, { title: string; body: string }> = {
+  score_filter: {
+    title: "סינון לפי ציון עסקה 80+ הוא יכולת PRO",
+    body:
+      "מסלול החינם כולל סינון עד ציון 60. הסינון לציונים הגבוהים — המכרזים שבהם הפער מול השומה " +
+      "הכי גדול — פתוח למנויי PRO. שאר הפילטרים והפיד המלא נשארים זמינים לכולם.",
+  },
+  premium_calculator: {
+    title: "מחשבון פרמיית הזכייה המלא הוא יכולת PRO",
+    body:
+      "מסלול החינם מציג את הבסיס לחישוב — מחיר המינימום, השומה הרשמית ומספר המכרזים שנבדקו. " +
+      "התחזית עצמה, כמה צפויים לשלם מעל המינימום ומה מחיר הזכייה הצפוי, פתוחה למנויי PRO.",
+  },
+};

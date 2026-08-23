@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
+  Crown,
   BellPlus,
   LayoutGrid,
   Table2,
@@ -18,6 +19,10 @@ import type { Deal, DealType, TenderPhase } from "@/lib/types";
 import { DEAL_TYPE_LABEL, formatILS, formatILSCompact, formatLandArea } from "@/lib/format";
 import { FILTERABLE_PHASES, PHASE_LABEL, matchesPhase, submissionInfo, tenderPhase } from "@/lib/tender-phase";
 import { DealBadge, DealTypeChip, ScoreChip, DiscountTag } from "@/components/ui";
+import { hasFeature, isScorePresetLocked } from "@/lib/limits";
+import { useUpgradeGate } from "@/components/UpgradeGate";
+import { trackEvent } from "@/lib/events";
+import type { PlanTier } from "@/lib/types";
 import { SaveDealButton } from "@/components/SaveDealButton";
 import { buildAlertHref } from "@/lib/alert-prefill";
 import { clearSearch, useSearchQuery } from "@/lib/search-store";
@@ -56,7 +61,20 @@ function useIsMobile() {
   return isMobile;
 }
 
-export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] }) {
+export function DealFeed({
+  deals,
+  cities,
+  tier = "free",
+}: {
+  deals: Deal[];
+  cities: string[];
+  /** Resolved on the server, so a PRO subscriber never sees the lock flash. */
+  tier?: PlanTier;
+}) {
+  const { show } = useUpgradeGate();
+  // The server already stripped the numbers for a free account; this is only
+  // about saying *why* the column is empty.
+  const premiumLocked = !hasFeature(tier, "premium_calculator");
   const [city, setCity] = useState<string>("");
   const [maxPrice, setMaxPrice] = useState<number>(PRICE_MAX);
   const [minDiscount, setMinDiscount] = useState<number>(0);
@@ -220,19 +238,35 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
 
           <FilterField label="ציון עסקה מינ׳">
             <div className="flex gap-1">
-              {SCORE_PRESETS.map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setMinScore(p)}
-                  className={`num rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
-                    minScore === p
-                      ? "border-accent bg-accent-soft text-accent"
-                      : "border-border bg-surface-2 text-muted hover:text-primary"
-                  }`}
-                >
-                  {p === 0 ? "הכל" : `${p}+`}
-                </button>
-              ))}
+              {SCORE_PRESETS.map((p) => {
+                // 60+ stays open — the feed has to be useful without paying.
+                // What PRO buys is the sharp end of it, which is exactly what
+                // the pricing table has promised all along.
+                const locked = isScorePresetLocked(tier, p);
+                return (
+                  <button
+                    key={p}
+                    onClick={() => {
+                      if (locked) {
+                        trackEvent("limit_hit", { kind: "score_filter", tier, preset: p });
+                        return show({ feature: "score_filter" });
+                      }
+                      setMinScore(p);
+                    }}
+                    title={locked ? "סינון ציון 80+ פתוח למנויי PRO" : undefined}
+                    className={`num inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
+                      minScore === p
+                        ? "border-accent bg-accent-soft text-accent"
+                        : locked
+                          ? "border-border bg-surface-2 text-faint hover:border-accent/50 hover:text-accent"
+                          : "border-border bg-surface-2 text-muted hover:text-primary"
+                    }`}
+                  >
+                    {p === 0 ? "הכל" : `${p}+`}
+                    {locked && <Crown size={11} aria-label="PRO" />}
+                  </button>
+                );
+              })}
             </div>
           </FilterField>
 
@@ -279,8 +313,20 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
 
           <FilterField label="סינון חכם">
             <button
-              onClick={() => setOnlyRealistic((v) => !v)}
-              title="מציג רק מכרזים שגם לאחר פרמיית הזכייה החזויה צפויים להישאר מתחת לשומה"
+              onClick={() => {
+                // Without the projection this filter would match nothing, so a
+                // free account is told why rather than shown an empty feed.
+                if (premiumLocked) {
+                  trackEvent("limit_hit", { kind: "premium_calculator", tier, from: "smart_filter" });
+                  return show({ feature: "premium_calculator" });
+                }
+                setOnlyRealistic((v) => !v);
+              }}
+              title={
+                premiumLocked
+                  ? "סינון לפי פרמיית הזכייה החזויה פתוח למנויי PRO"
+                  : "מציג רק מכרזים שגם לאחר פרמיית הזכייה החזויה צפויים להישאר מתחת לשומה"
+              }
               className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
                 onlyRealistic
                   ? "border-positive bg-positive-soft text-positive"
@@ -288,6 +334,7 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
               }`}
             >
               <Gavel size={13} /> מתחת לשומה גם אחרי פרמיה
+              {premiumLocked && <Crown size={11} />}
             </button>
           </FilterField>
 
@@ -338,10 +385,25 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
         <div className="ms-auto flex items-center gap-3">
           <label className="flex items-center gap-2 text-sm text-muted">
             מיון:
-            <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="input">
+            <select
+              value={sort}
+              onChange={(e) => {
+                const next = e.target.value as SortKey;
+                // Sorting by a number the plan does not include would silently
+                // order the feed at random; refuse and explain instead.
+                if (premiumLocked && (next === "premium" || next === "expected_gap")) {
+                  trackEvent("limit_hit", { kind: "premium_calculator", tier, from: "sort" });
+                  return show({ feature: "premium_calculator" });
+                }
+                setSort(next);
+              }}
+              className="input"
+            >
               <option value="score">ציון עסקה</option>
-              <option value="expected_gap">פער חזוי (אחרי פרמיה)</option>
-              <option value="premium">פרמיית זכייה</option>
+              <option value="expected_gap">
+                פער חזוי (אחרי פרמיה){premiumLocked ? " · PRO" : ""}
+              </option>
+              <option value="premium">פרמיית זכייה{premiumLocked ? " · PRO" : ""}</option>
               <option value="discount">פער משומה</option>
               <option value="price_asc">מחיר (נמוך לגבוה)</option>
               <option value="deadline">מועד הגשה קרוב</option>
@@ -371,9 +433,9 @@ export function DealFeed({ deals, cities }: { deals: Deal[]; cities: string[] })
       ) : effectiveView === "map" ? (
         <DealMap deals={filtered} />
       ) : effectiveView === "table" ? (
-        <DealTable deals={filtered} />
+        <DealTable deals={filtered} premiumLocked={premiumLocked} tier={tier} show={show} />
       ) : (
-        <DealCards deals={filtered} />
+        <DealCards deals={filtered} premiumLocked={premiumLocked} tier={tier} show={show} />
       )}
     </div>
   );
@@ -411,7 +473,9 @@ function ToggleBtn({
   );
 }
 
-function DealTable({ deals }: { deals: Deal[] }) {
+type PremiumGate = { premiumLocked: boolean; tier: PlanTier; show: (b: { feature: "premium_calculator" }) => void };
+
+function DealTable({ deals, premiumLocked, tier, show }: { deals: Deal[] } & PremiumGate) {
   return (
     <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-[var(--shadow)]">
       <table className="w-full min-w-[900px] border-collapse text-sm">
@@ -455,7 +519,14 @@ function DealTable({ deals }: { deals: Deal[] }) {
                 <DiscountTag pct={d.discountPct} />
               </td>
               <td className="px-3 py-3">
-                <PremiumCell deal={d} />
+                <PremiumCell
+                  deal={d}
+                  locked={premiumLocked}
+                  onLocked={() => {
+                    trackEvent("limit_hit", { kind: "premium_calculator", tier });
+                    show({ feature: "premium_calculator" });
+                  }}
+                />
               </td>
               <td className="px-3 py-3">
                 <DeadlineCell deal={d} />
@@ -486,7 +557,7 @@ function DealTable({ deals }: { deals: Deal[] }) {
   );
 }
 
-function DealCards({ deals }: { deals: Deal[] }) {
+function DealCards({ deals, premiumLocked, tier, show }: { deals: Deal[] } & PremiumGate) {
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
       {deals.map((d) => (
@@ -518,7 +589,24 @@ function DealCards({ deals }: { deals: Deal[] }) {
             <span>·</span>
             <span>ייעוד: {d.zoning}</span>
           </div>
-          {d.winningPremium != null && (
+          {premiumLocked && (
+            <button
+              type="button"
+              onClick={() => {
+                trackEvent("limit_hit", { kind: "premium_calculator", tier });
+                show({ feature: "premium_calculator" });
+              }}
+              className="mb-3 flex w-full items-center justify-between rounded-lg border border-dashed border-accent/40 px-2.5 py-1.5 text-xs transition hover:bg-accent-soft"
+            >
+              <span className="flex items-center gap-1 text-muted">
+                <Gavel size={12} /> פרמיית זכייה
+              </span>
+              <span className="inline-flex items-center gap-1 font-bold text-accent">
+                <Crown size={11} /> PRO
+              </span>
+            </button>
+          )}
+          {!premiumLocked && d.winningPremium != null && (
             <div className="mb-3 flex items-center justify-between rounded-lg bg-surface-2 px-2.5 py-1.5 text-xs">
               <span className="flex items-center gap-1 text-muted">
                 <Gavel size={12} /> פרמיית זכייה
@@ -564,7 +652,20 @@ function DealCards({ deals }: { deals: Deal[] }) {
  * Winning premium + whether the projected winning price still clears the
  * appraisal. "—" when too little tender history backs a projection.
  */
-function PremiumCell({ deal }: { deal: Deal }) {
+function PremiumCell({ deal, locked, onLocked }: { deal: Deal; locked: boolean; onLocked: () => void }) {
+  // "—" means we have no projection for this tender. A locked plan is a
+  // different fact and must not be dressed as missing data.
+  if (locked) {
+    return (
+      <button
+        type="button"
+        onClick={onLocked}
+        className="inline-flex items-center gap-1 rounded-md border border-dashed border-accent/40 px-1.5 py-0.5 text-[10px] font-semibold text-accent transition hover:bg-accent-soft"
+      >
+        <Crown size={10} /> PRO
+      </button>
+    );
+  }
   if (deal.winningPremium == null) {
     return <span className="text-xs text-faint">—</span>;
   }
