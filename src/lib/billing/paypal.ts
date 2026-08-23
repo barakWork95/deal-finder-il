@@ -1,4 +1,6 @@
 import "server-only";
+import { createVerify, X509Certificate } from "node:crypto";
+import { crc32 } from "node:zlib";
 import { paypalConfig, formatAmount, type PayPalConfig } from "./config";
 
 /**
@@ -179,18 +181,71 @@ export type WebhookHeaders = {
 };
 
 /**
- * Asks PayPal whether a webhook really came from PayPal.
+ * Certificates, cached by URL. PayPal rotates them rarely and signs every
+ * webhook with one, so fetching per event would add a round trip to the
+ * critical path for no benefit.
+ */
+const certCache = new Map<string, Promise<string>>();
+
+/**
+ * PayPal only ever serves its signing certs from its own domain. Without this
+ * check, `cert_url` is an attacker-controlled instruction telling us where to
+ * fetch the key that will validate their own signature — which is the entire
+ * attack, handed over politely in a header.
+ */
+function isPayPalCertUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.protocol === "https:" &&
+      (parsed.hostname === "paypal.com" || parsed.hostname.endsWith(".paypal.com"))
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function fetchCert(certUrl: string): Promise<string> {
+  const cached = certCache.get(certUrl);
+  if (cached) return cached;
+
+  const promise = (async () => {
+    const response = await fetch(certUrl, { cache: "no-store" });
+    if (!response.ok) throw new PayPalError(`cert fetch failed (${response.status})`, response.status);
+    return response.text();
+  })();
+
+  certCache.set(certUrl, promise);
+  // A failed fetch must not be cached as a permanent answer.
+  promise.catch(() => certCache.delete(certUrl));
+  return promise;
+}
+
+/**
+ * Verifies a webhook signature **ourselves**, against PayPal's certificate.
  *
- * This is the single most security-critical call in the billing path: the
- * handler behind it sets `tier = 'pro'`, so an unverified webhook endpoint is a
- * public endpoint for granting yourself a paid plan. It returns false on any
- * doubt — a non-200 from the verification call, a missing header, a body that
- * does not parse — because "we could not confirm this is genuine" and "this is
- * forged" deserve exactly the same response.
+ * This used to post the event back to PayPal's /v1/notifications/
+ * verify-webhook-signature endpoint and trust its verdict. That endpoint
+ * answered `{"verification_status":"SUCCESS"}` for a request whose signature
+ * was the literal string "forged-signature" — verified against the sandbox on
+ * 2026-08-23 — so the endpoint that exists to authenticate webhooks
+ * authenticated a webhook nobody had signed. A forged event granted PRO in
+ * production, which is exactly the failure the check was there to prevent.
  *
- * The raw body is re-parsed rather than re-serialised: JSON.stringify of a
- * parsed object can reorder keys or change number formatting, and the
- * signature is over the bytes PayPal sent.
+ * PayPal's own documentation prefers this path ("faster and avoids extra API
+ * dependency and latency"); it is also the only one that actually verifies.
+ * The algorithm is theirs:
+ *
+ *     message   = transmission_id | transmission_time | webhook_id | crc32(raw body)
+ *     signature = base64(RSA-SHA256(message, PayPal's private key))
+ *
+ * Note that the CRC is over the **raw bytes** as received. Re-serialising a
+ * parsed object changes key order and number formatting, and the CRC with it,
+ * which is why the caller passes the untouched body text.
+ *
+ * Returns false on any doubt at all — a missing header, a cert from the wrong
+ * host, an unexpected algorithm, a fetch that failed. "We cannot confirm this
+ * is genuine" and "this is forged" deserve the same answer.
  */
 export async function verifyWebhook(params: {
   headers: WebhookHeaders;
@@ -199,49 +254,26 @@ export async function verifyWebhook(params: {
   const config = paypalConfig();
   if (!config?.webhookId) return false;
 
-  const { headers } = params;
-  if (
-    !headers.authAlgo ||
-    !headers.certUrl ||
-    !headers.transmissionId ||
-    !headers.transmissionSig ||
-    !headers.transmissionTime
-  ) {
+  const { authAlgo, certUrl, transmissionId, transmissionSig, transmissionTime } = params.headers;
+  if (!authAlgo || !certUrl || !transmissionId || !transmissionSig || !transmissionTime) {
     return false;
   }
+  if (!isPayPalCertUrl(certUrl)) return false;
 
-  // PayPal only accepts the cert from its own domains. Without this check the
-  // cert_url header is an instruction to fetch a signature-verification key
-  // from wherever the caller likes.
-  if (!/^https:\/\/api(-m)?(\.[a-z0-9-]+)*\.paypal\.com\//i.test(headers.certUrl)) {
-    return false;
-  }
-
-  let webhookEvent: unknown;
-  try {
-    webhookEvent = JSON.parse(params.rawBody);
-  } catch {
-    return false;
-  }
+  // The only algorithm PayPal signs with. Accepting whatever the header asks
+  // for would let a caller nominate one we verify less carefully.
+  if (authAlgo.toUpperCase() !== "SHA256WITHRSA") return false;
 
   try {
-    const result = await call<{ verification_status: string }>(
-      config,
-      "/v1/notifications/verify-webhook-signature",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          auth_algo: headers.authAlgo,
-          cert_url: headers.certUrl,
-          transmission_id: headers.transmissionId,
-          transmission_sig: headers.transmissionSig,
-          transmission_time: headers.transmissionTime,
-          webhook_id: config.webhookId,
-          webhook_event: webhookEvent,
-        }),
-      },
-    );
-    return result.verification_status === "SUCCESS";
+    const pem = await fetchCert(certUrl);
+    const publicKey = new X509Certificate(pem).publicKey;
+
+    const checksum = crc32(Buffer.from(params.rawBody, "utf8")) >>> 0;
+    const message = `${transmissionId}|${transmissionTime}|${config.webhookId}|${checksum}`;
+
+    return createVerify("RSA-SHA256")
+      .update(message, "utf8")
+      .verify(publicKey, transmissionSig, "base64");
   } catch {
     return false;
   }
