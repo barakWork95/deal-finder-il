@@ -12,6 +12,10 @@ import type { Alert, AlertChannel, AlertFrequency } from "@/lib/types";
  *
  * The client posts once per browser after the first sign-in and then adopts
  * the response, so two devices converge instead of overwriting each other.
+ *
+ * The merge is also where a free plan's limits have to hold: without that,
+ * creating ten alerts signed out and then signing in would be the way around
+ * them. mergeUserData rations only the genuinely new ones, and removes nothing.
  */
 
 export const dynamic = "force-dynamic";
@@ -51,7 +55,9 @@ function sanitise(body: unknown): UserData {
     ? raw.savedDealIds.filter((id): id is string => typeof id === "string").slice(0, 500)
     : [];
 
-  return { alerts, savedDealIds };
+  // The browser does not get a say in the plan: whatever it posts, the merge
+  // reads the real tier from the database.
+  return { alerts, savedDealIds, tier: "free" };
 }
 
 /** 501 rather than 401 when auth simply isn't switched on yet. */

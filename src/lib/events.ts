@@ -30,6 +30,12 @@ export const EVENT_NAMES = [
   "billing_notice_view",
   /** Someone opened the pricing table from the sidebar's plan card. */
   "plan_compare_click",
+  /**
+   * A free account was stopped by a plan limit. The top of the upgrade funnel
+   * that is not self-selected: these people wanted to do something and could
+   * not, which is a different and stronger signal than browsing the pricing.
+   */
+  "limit_hit",
 ] as const;
 
 export type EventName = (typeof EVENT_NAMES)[number];
@@ -44,6 +50,7 @@ export const EVENT_LABEL: Record<EventName, string> = {
   upgrade_click: "לחיצה על שדרוג ל-PRO",
   billing_notice_view: "הצגת הודעת ״הסליקה לא נפתחה״",
   plan_compare_click: "פתיחת השוואת מסלולים",
+  limit_hit: "חסימה על מגבלת מסלול חינם",
 };
 
 /** Small, scalar, and short — see the same limits enforced server-side. */

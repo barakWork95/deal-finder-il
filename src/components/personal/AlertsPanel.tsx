@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
+  Crown,
   Mail,
   MessageCircle,
   Pause,
@@ -27,6 +28,8 @@ import type {
 import { DEAL_TYPE_LABEL, formatILSCompact } from "@/lib/format";
 import { useProfile } from "@/lib/client-store";
 import { usePersonalAlerts } from "@/lib/personal-data";
+import { isAtLimit, limitFor } from "@/lib/limits";
+import { useUpgradeGate } from "@/components/UpgradeGate";
 import type { UserData } from "@/lib/user-repository";
 import { Chip, EmptyState, Field, IconBtn } from "@/components/personal/controls";
 import { ZONINGS, hasPrefill, type AlertPrefill } from "@/lib/alert-prefill";
@@ -81,7 +84,12 @@ export function AlertsPanel({
   /** Which channels the server can actually send on right now. */
   delivery?: { email: boolean; whatsapp: boolean };
 }) {
-  const { alerts, create, setActive, remove, signedIn } = usePersonalAlerts(account);
+  const { alerts, create, setActive, remove, signedIn, tier, activeCount } =
+    usePersonalAlerts(account);
+  const { show } = useUpgradeGate();
+
+  const alertLimit = limitFor(tier, "alerts");
+  const atAlertLimit = isAtLimit(tier, "alerts", activeCount);
   const [profile] = useProfile();
   const [justSaved, setJustSaved] = useState<string | null>(null);
 
@@ -141,9 +149,11 @@ export function AlertsPanel({
       notifyOnOpen,
       triggeredThisMonth: 0,
     };
-    void create(alert);
-    setName("");
-    setJustSaved(alert.id);
+    void create(alert).then((result) => {
+      if (!result.ok) return show(result);
+      setName("");
+      setJustSaved(alert.id);
+    });
   }
 
   // What the alert being built would catch right now, so the filters can be
@@ -204,7 +214,13 @@ export function AlertsPanel({
               alert={a}
               matches={countMatches(deals, a)}
               highlight={a.id === justSaved}
-              onToggle={() => void setActive(a.id, !a.isActive)}
+              onToggle={() =>
+                void setActive(a.id, !a.isActive).then((result) => {
+                  // Only ever refused when turning one back *on*; pausing is
+                  // how someone gets back under the line and always works.
+                  if (!result.ok) show(result);
+                })
+              }
               onRemove={() => void remove(a.id)}
             />
           ))}
@@ -219,6 +235,28 @@ export function AlertsPanel({
       {/* Query builder */}
       <section className="rounded-xl border border-border bg-surface p-5 shadow-[var(--shadow)]">
         <h2 className="mb-4 text-lg font-bold text-primary">יצירת התראה חדשה</h2>
+
+        {/* Stated up front, not only on the click. Someone filling in a long
+            form and being refused at the end has wasted their time; the wall
+            is more honest as a label than as a surprise. */}
+        {atAlertLimit && alertLimit != null && (
+          <p className="mb-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning-soft p-3 text-[11px] leading-relaxed text-warning">
+            <Crown size={14} className="mt-px shrink-0" />
+            <span>
+              מסלול החינם כולל עד <span className="num font-bold">{alertLimit}</span> התראות פעילות,
+              ויש לך <span className="num font-bold">{activeCount}</span>. ההתראות הקיימות ממשיכות
+              לפעול — להוספה אפשר להשהות אחת מהן, או{" "}
+              <button
+                type="button"
+                onClick={() => show({ kind: "alerts", limit: alertLimit, current: activeCount })}
+                className="font-bold underline hover:no-underline"
+              >
+                לעבור ל-PRO
+              </button>
+              .
+            </span>
+          </p>
+        )}
 
         {carriedFilters && (
           <p className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-accent/30 bg-accent-soft p-3 text-[11px] text-muted">
@@ -406,10 +444,16 @@ export function AlertsPanel({
           <button
             type="button"
             onClick={saveAlert}
+            // Deliberately NOT disabled at the limit, only relabelled. A
+            // disabled button cannot be clicked, so the refusal is never
+            // recorded — and the people who tried to add a third alert are
+            // precisely the ones the upgrade funnel needs to count. Pressing it
+            // explains the wall and files the limit_hit; only a form that is
+            // genuinely unsubmittable (no channel) is disabled.
             disabled={channels.length === 0}
             className="btn-primary inline-flex items-center gap-1.5 rounded-lg bg-accent px-5 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <Plus size={15} /> שמירת התראה
+            <Plus size={15} /> {atAlertLimit ? "הגעת למגבלת המסלול" : "שמירת התראה"}
           </button>
         </div>
       </section>

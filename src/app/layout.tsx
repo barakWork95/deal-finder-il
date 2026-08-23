@@ -4,6 +4,7 @@ import "./globals.css";
 import { AppHeader } from "@/components/AppHeader";
 import { MobileNav } from "@/components/MobileNav";
 import { AuthProvider } from "@/components/AuthProvider";
+import { UpgradeGateProvider } from "@/components/UpgradeGate";
 
 // Hebrew UI: Assistant — modern, elegant, highly legible in both themes.
 const assistant = Assistant({
@@ -54,9 +55,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         {/* Pass-through until Clerk is switched on — see AuthProvider. */}
         <AuthProvider>
-          <AppHeader />
-          <main className="flex-1 pb-20 md:pb-0">{children}</main>
-          <MobileNav />
+          {/* One modal for the whole app: the bookmark button alone renders
+              146 times on the feed, and each of those can hit a plan limit. */}
+          <UpgradeGateProvider>
+            <AppHeader />
+            <main className="flex-1 pb-20 md:pb-0">{children}</main>
+            <MobileNav />
+          </UpgradeGateProvider>
         </AuthProvider>
       </body>
     </html>
