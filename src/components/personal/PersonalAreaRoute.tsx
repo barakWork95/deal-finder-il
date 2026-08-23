@@ -4,6 +4,9 @@ import { isAuthConfigured } from "@/lib/auth";
 import { getUserData } from "@/lib/user-repository";
 import { notificationStatus } from "@/lib/notifications/config";
 import { getContact } from "@/lib/notifications/repository";
+import { paypalConfig, canCheckout } from "@/lib/billing/config";
+import { isAdminUserId } from "@/lib/admin";
+import { listSubscriptionsForUser } from "@/lib/billing/repository";
 import { PersonalArea } from "@/components/personal/PersonalArea";
 import { parseAlertPrefill, parseTab, type PersonalTab } from "@/lib/alert-prefill";
 
@@ -36,9 +39,42 @@ export async function PersonalAreaRoute({
   // is what deadlocked this page before (see src/lib/db.ts).
   const contact = userId ? await getContact(userId) : null;
 
+  // Sequential for the same reason as the line above — one request must never
+  // hold two pooled connections at once.
+  const subscriptions = userId ? await listSubscriptionsForUser(userId) : [];
+
   // Whether alerts actually get sent depends on server-side keys the browser
   // cannot see, so the answer is resolved here and passed down — the panel
   // must never claim a channel is live when nothing is configured behind it.
+  // Whether checkout can be offered is a server-side question: it depends on a
+  // secret and on a plan id the browser cannot see. The client id it returns is
+  // public by design — it identifies the merchant, not the account.
+  const paypal = paypalConfig();
+
+  // Sandbox credentials on a production deployment are a real hazard, not just
+  // an untidy state: the button renders and works, but only a PayPal *sandbox*
+  // account can complete it. A visitor's real account simply cannot log in, so
+  // everyone who tries is sent to a dead end. The "מצב בדיקה" notice keeps that
+  // from being deceptive; it does not make it useful.
+  //
+  // So while sandbox is paired with production, checkout is offered to admins
+  // only — enough to test the whole path on the real deployment, without
+  // showing a payment button that nobody else can finish. Setting
+  // PAYPAL_ENV=live removes the restriction on its own.
+  const sandboxOnProd = paypal?.environment === "sandbox" && process.env.NODE_ENV === "production";
+  const offerCheckout = canCheckout(paypal) && (!sandboxOnProd || isAdminUserId(userId));
+
+  const billing =
+    offerCheckout && paypal
+      ? {
+          configured: true,
+          sandbox: paypal.environment === "sandbox",
+          clientId: paypal.clientId,
+          currency: paypal.currency,
+          price: paypal.price,
+        }
+      : undefined;
+
   const status = notificationStatus();
   const delivery = {
     email: status.canSend && status.email !== "not_configured",
@@ -54,6 +90,13 @@ export async function PersonalAreaRoute({
       account={account}
       delivery={delivery}
       tier={contact?.tier ?? "free"}
+      billing={billing}
+      subscriptions={subscriptions.map((subscription) => ({
+        id: subscription.id,
+        status: subscription.status,
+        currentPeriodEnd: subscription.currentPeriodEnd,
+        cancelledAt: subscription.cancelledAt,
+      }))}
     />
   );
 }
