@@ -44,7 +44,7 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children, modal }: LayoutProps<"/">) {
   return (
     <html
       lang="he"
@@ -61,6 +61,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <UpgradeGateProvider>
             <AppHeader />
             <main className="flex-1 pb-20 md:pb-0">{children}</main>
+            {/* The tender drawer. Empty on every route but an intercepted
+                /deal/[id] — see src/app/@modal/default.tsx. */}
+            {modal}
             <MobileNav />
           </UpgradeGateProvider>
         </AuthProvider>

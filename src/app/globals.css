@@ -387,3 +387,37 @@ select.input {
     animation: none;
   }
 }
+
+/* Tender drawer: the panel slides in from the inline-start edge (the left, in
+   this RTL app) and the backdrop fades under it. Both honour a reduced-motion
+   preference by appearing outright rather than not appearing at all. */
+@keyframes drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes drawer-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.drawer-panel {
+  animation: drawer-in 0.22s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.drawer-backdrop {
+  animation: drawer-backdrop-in 0.22s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .drawer-panel,
+  .drawer-backdrop {
+    animation: none;
+  }
+}
