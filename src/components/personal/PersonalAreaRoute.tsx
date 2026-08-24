@@ -5,6 +5,7 @@ import { getUserData } from "@/lib/user-repository";
 import { notificationStatus } from "@/lib/notifications/config";
 import { paypalConfig, canCheckout } from "@/lib/billing/config";
 import { isAdminUserId } from "@/lib/admin";
+import { hasFeature } from "@/lib/limits";
 import { listSubscriptionsForUser } from "@/lib/billing/repository";
 import { PersonalArea } from "@/components/personal/PersonalArea";
 import { parseAlertPrefill, parseTab, type PersonalTab } from "@/lib/alert-prefill";
@@ -69,6 +70,27 @@ export async function PersonalAreaRoute({
         }
       : undefined;
 
+  const tier = account?.tier ?? "free";
+
+  // Stripped here, for the same reason as the feed's own strip in
+  // src/app/page.tsx: PersonalArea is a client component, so every field it
+  // receives is serialised into the page. SavedDealsPanel renders a PRO
+  // affordance in place of the projection, and that gate is only real if the
+  // number never reaches the browser — otherwise it sits in the RSC payload
+  // for anyone who opens the network tab.
+  //
+  // winningPremiumN is deliberately left in: the sample size is public (see
+  // WinningPremium), it is the free plan's basis-of-calculation, not the
+  // projection itself.
+  const visibleDeals = hasFeature(tier, "premium_calculator")
+    ? deals
+    : deals.map(({ winningPremium, expectedWinningPrice, expectedGapPct, ...rest }) => {
+        void winningPremium;
+        void expectedWinningPrice;
+        void expectedGapPct;
+        return rest;
+      });
+
   const status = notificationStatus();
   const delivery = {
     email: status.canSend && status.email !== "not_configured",
@@ -77,13 +99,13 @@ export async function PersonalAreaRoute({
 
   return (
     <PersonalArea
-      deals={deals}
+      deals={visibleDeals}
       cities={cities}
       initialTab={parseTab(Array.isArray(params.tab) ? params.tab[0] : params.tab, defaultTab)}
       prefill={parseAlertPrefill(params)}
       account={account}
       delivery={delivery}
-      tier={account?.tier ?? "free"}
+      tier={tier}
       billing={billing}
       subscriptions={subscriptions.map((subscription) => ({
         id: subscription.id,

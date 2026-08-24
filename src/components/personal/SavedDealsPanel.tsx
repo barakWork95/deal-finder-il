@@ -6,9 +6,11 @@ import type { Deal } from "@/lib/types";
 import { formatILS, formatLandArea } from "@/lib/format";
 import { submissionInfo } from "@/lib/tender-phase";
 import { useSavedDeals } from "@/lib/personal-data";
-import { isAtLimit, limitFor } from "@/lib/limits";
+import { hasFeature, isAtLimit, limitFor } from "@/lib/limits";
 import { useUpgradeGate } from "@/components/UpgradeGate";
+import { trackEvent } from "@/lib/events";
 import type { UserData } from "@/lib/user-repository";
+import type { PlanTier } from "@/lib/types";
 import { DealTypeChip, DiscountTag, ScoreChip } from "@/components/ui";
 import { EmptyState, IconBtn } from "@/components/personal/controls";
 
@@ -17,10 +19,37 @@ import { EmptyState, IconBtn } from "@/components/personal/controls";
  * the live feed passed in by the server, so a saved deal never shows a stale
  * price or a deadline that has since moved.
  */
-export function SavedDealsPanel({ deals, account }: { deals: Deal[]; account?: UserData }) {
+export function SavedDealsPanel({
+  deals,
+  account,
+  serverTier = "free",
+}: {
+  deals: Deal[];
+  account?: UserData;
+  /**
+   * The plan as the server resolved it — the same value that decided whether
+   * the projection was stripped out of `deals` at all.
+   *
+   * Deliberately not the store's tier, which is what the save-limit logic
+   * below uses. The store reads `signedIn` from Clerk, and that is false until
+   * Clerk finishes loading, so a PRO subscriber's first render would call
+   * itself free and paint a lock over the number they are paying for before
+   * flipping back. src/lib/plan.ts spends a query per request to avoid exactly
+   * that flash; it would be undone here by deriving the same answer from the
+   * client mirror.
+   *
+   * Pairing it with the strip has a second benefit: display and data can never
+   * disagree, because one value decides both.
+   */
+  serverTier?: PlanTier;
+}) {
   const { ids, remove, tier } = useSavedDeals(account);
   const { show } = useUpgradeGate();
   const savedLimit = limitFor(tier, "saved");
+  // The projection fields are stripped server-side for this plan (see
+  // PersonalAreaRoute), so this decides what stands in their place — it is not
+  // what hides them.
+  const premiumLocked = !hasFeature(serverTier, "premium_calculator");
   const atSavedLimit = isAtLimit(tier, "saved", ids.length);
   const byId = new Map(deals.map((d) => [d.id, d]));
 
@@ -115,17 +144,42 @@ export function SavedDealsPanel({ deals, account }: { deals: Deal[]; account?: U
                   {d.propertyType} · {formatLandArea(d.areaSqm)} · ייעוד: {d.zoning}
                 </p>
 
-                {d.expectedGapPct != null && (
-                  <p
-                    className={`mt-1 flex items-center gap-1 text-[11px] font-medium ${
-                      d.expectedGapPct > 0 ? "text-positive" : "text-warning"
-                    }`}
+                {/* Locked, not dropped. Removing the line for a free account
+                    would read as "this tender has no projection", which is a
+                    different fact — the same distinction the feed's PremiumCell
+                    draws. It shows on every saved tender because whether this
+                    one has a projection is itself behind the gate, so the
+                    button offers the capability rather than implying a number
+                    exists. */}
+                {premiumLocked ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      trackEvent("limit_hit", { kind: "premium_calculator", tier: serverTier });
+                      show({ feature: "premium_calculator" });
+                    }}
+                    className="mt-1 inline-flex items-center gap-1.5 rounded-md border border-dashed border-accent/40 px-1.5 py-0.5 text-[11px] font-medium text-muted transition hover:bg-accent-soft"
                   >
                     <Gavel size={11} />
-                    {d.expectedGapPct > 0
-                      ? `חזוי ${Math.round(d.expectedGapPct)}% מתחת לשומה`
-                      : `חזוי ${Math.abs(Math.round(d.expectedGapPct))}% מעל השומה`}
-                  </p>
+                    פער חזוי משומה
+                    <span className="inline-flex items-center gap-0.5 font-bold text-accent">
+                      <Crown size={10} />
+                      PRO
+                    </span>
+                  </button>
+                ) : (
+                  d.expectedGapPct != null && (
+                    <p
+                      className={`mt-1 flex items-center gap-1 text-[11px] font-medium ${
+                        d.expectedGapPct > 0 ? "text-positive" : "text-warning"
+                      }`}
+                    >
+                      <Gavel size={11} />
+                      {d.expectedGapPct > 0
+                        ? `חזוי ${Math.round(d.expectedGapPct)}% מתחת לשומה`
+                        : `חזוי ${Math.abs(Math.round(d.expectedGapPct))}% מעל השומה`}
+                    </p>
+                  )
                 )}
 
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
