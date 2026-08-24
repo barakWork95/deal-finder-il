@@ -159,7 +159,7 @@ export function PersonalArea({
                 delivery={delivery}
               />
             )}
-          {tab === "saved" && <SavedDealsPanel deals={deals} account={account} />}
+          {tab === "saved" && <SavedDealsPanel deals={deals} account={account} serverTier={tier} />}
           {tab === "account" && <AccountPanel />}
             {tab === "billing" && (
               <BillingPanel tier={tier} billing={billing} subscriptions={subscriptions} />
