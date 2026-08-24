@@ -14,9 +14,11 @@ import {
   Gavel,
   X,
   Map as MapIcon,
+  SlidersHorizontal,
+  ChevronDown,
 } from "lucide-react";
-import type { Deal, DealType, TenderPhase } from "@/lib/types";
-import { DEAL_TYPE_LABEL, formatILS, formatILSCompact, formatLandArea } from "@/lib/format";
+import type { BadgeKind, Deal, DealType, TenderPhase } from "@/lib/types";
+import { BADGE_LABEL, DEAL_TYPE_LABEL, formatILS, formatILSCompact, formatLandArea } from "@/lib/format";
 import { FILTERABLE_PHASES, PHASE_LABEL, matchesPhase, submissionInfo, tenderPhase } from "@/lib/tender-phase";
 import { DealBadge, DealTypeChip, ScoreChip, DiscountTag } from "@/components/ui";
 import { hasFeature, isScorePresetLocked } from "@/lib/limits";
@@ -48,6 +50,7 @@ const DISCOUNT_PRESETS = [0, 10, 15, 20];
 // Mirrors the Deal Score tiers used everywhere else (80+ green, 60–79 amber).
 const SCORE_PRESETS = [0, 60, 80, 90];
 const PRICE_MAX = 60_000_000; // real RMI land tenders reach tens of millions
+
 
 /** True on phone-width screens; cards replace the wide table there. */
 function useIsMobile() {
@@ -91,10 +94,17 @@ export function DealFeed({
   // "Realistic" = expected winning price still below the official appraisal.
   const [onlyRealistic, setOnlyRealistic] = useState(false);
   const [sort, setSort] = useState<SortKey>("score");
-  const [view, setView] = useState<ViewMode>("table");
+  // Collapsed to start: the feed is the page, and the controls for narrowing
+  // it are only worth their vertical space once someone wants them.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  // Cards, not the table. The feed is the product and it has to be readable
+  // on arrival; the 10-column table is still one click away for anyone who
+  // wants to compare tenders side by side.
+  const [view, setView] = useState<ViewMode>("cards");
   const search = useSearchQuery();
   const isMobile = useIsMobile();
-  // The wide table has no phone layout; the map does, so it stays available.
+  // The wide table still has no phone layout; the map does, so it stays
+  // available. Only reachable now by choosing it, since cards are the default.
   const effectiveView: ViewMode = isMobile && view === "table" ? "cards" : view;
 
   function toggleType(t: DealType) {
@@ -192,182 +202,249 @@ export function DealFeed({
     phases.length +
     (onlyRealistic ? 1 : 0);
 
+  // What the collapsed bar says is on. Same set the count is built from, so
+  // the two can never disagree about whether a filter is active.
+  const activeFilterSummary = useMemo(() => {
+    const out: string[] = [];
+    if (city) out.push(city);
+    if (maxPrice < PRICE_MAX) out.push(`עד ${formatILSCompact(maxPrice)}`);
+    if (minDiscount > 0) out.push(`פער ${minDiscount}%+`);
+    if (minScore > 0) out.push(`ציון ${minScore}+`);
+    for (const p of phases) out.push(PHASE_LABEL[p]);
+    for (const t of types) out.push(DEAL_TYPE_LABEL[t]);
+    if (onlyRealistic) out.push("מתחת לשומה אחרי פרמיה");
+    return out;
+  }, [city, maxPrice, minDiscount, minScore, phases, types, onlyRealistic]);
+
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-5">
-      {/* Filter bar */}
-      <div className="rounded-xl border border-border bg-surface p-3 shadow-[var(--shadow)]">
-        <div className="flex flex-wrap items-end gap-3">
-          <FilterField label="עיר">
-            <select value={city} onChange={(e) => setCity(e.target.value)} className="input min-w-[150px]">
-              <option value="">כל הערים</option>
-              {cities.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </FilterField>
+      {/* Filter bar — a disclosure, not a wall.
 
-          <FilterField
-            label={`תקציב מקסימלי: ${maxPrice >= PRICE_MAX ? "ללא הגבלה" : formatILSCompact(maxPrice)}`}
+          Seven controls unfolded above the feed is most of a phone screen and
+          a third of a laptop one, spent before a single tender is visible. The
+          summary row keeps what is actually needed at rest — that filters
+          exist, how many are on, and the way out of them — and the controls
+          themselves are one click away. */}
+      <div className="rounded-xl border border-border bg-surface shadow-[var(--shadow)]">
+        <div className="flex flex-wrap items-center gap-2 p-3">
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((v) => !v)}
+            aria-expanded={filtersOpen}
+            aria-controls="feed-filters"
+            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+              activeFilterCount > 0
+                ? "border-accent bg-accent-soft text-accent"
+                : "border-border bg-surface-2 text-primary hover:border-border-strong"
+            }`}
           >
-            <input
-              type="range"
-              min={500_000}
-              max={PRICE_MAX}
-              step={500_000}
-              value={maxPrice}
-              onChange={(e) => setMaxPrice(Number(e.target.value))}
-              className="w-44 accent-[var(--accent)]"
+            <SlidersHorizontal size={14} />
+            סינון
+            {activeFilterCount > 0 && (
+              <span className="num rounded-full bg-accent px-1.5 py-0.5 text-[10px] leading-none text-white">
+                {activeFilterCount}
+              </span>
+            )}
+            <ChevronDown
+              size={14}
+              className={`transition-transform ${filtersOpen ? "rotate-180" : ""}`}
             />
-          </FilterField>
+          </button>
 
-          <FilterField label="פער משומה מינ׳">
-            <div className="flex gap-1">
-              {DISCOUNT_PRESETS.map((p) => (
+          {/* Collapsed, the count alone does not say *what* is on — and a feed
+              narrowed by a filter you cannot see reads as a feed with nothing
+              in it. */}
+          {!filtersOpen && activeFilterSummary.length > 0 && (
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              {activeFilterSummary.map((label) => (
+                <span
+                  key={label}
+                  className="rounded-md border border-border bg-surface-2 px-2 py-0.5 text-[11px] text-muted"
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+          )}
+
+        <div className="ms-auto flex items-center gap-2">
+          {activeFilterCount > 0 && (
+            <button
+              onClick={reset}
+              className="rounded-lg px-3 py-2 text-xs font-medium text-muted transition hover:text-primary"
+            >
+              ניקוי ({activeFilterCount})
+            </button>
+          )}
+          <Link
+            href={buildAlertHref({
+              city: city || undefined,
+              // Only a budget that actually narrows the feed is worth carrying.
+              maxPrice: maxPrice < PRICE_MAX ? maxPrice : undefined,
+              minDiscount,
+              minScore,
+              types,
+              phases,
+            })}
+            title="פתיחת טופס התראה עם הסינון הנוכחי"
+            className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs font-semibold text-primary transition hover:border-border-strong"
+          >
+            <BellPlus size={14} /> שמירת סינון כהתראה
+          </Link>
+        </div>
+        </div>
+
+        {filtersOpen && (
+          <div
+            id="feed-filters"
+            className="flex flex-wrap items-end gap-3 border-t border-border p-3"
+          >
+        <FilterField label="עיר">
+          <select value={city} onChange={(e) => setCity(e.target.value)} className="input min-w-[150px]">
+            <option value="">כל הערים</option>
+            {cities.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </FilterField>
+
+        <FilterField
+          label={`תקציב מקסימלי: ${maxPrice >= PRICE_MAX ? "ללא הגבלה" : formatILSCompact(maxPrice)}`}
+        >
+          <input
+            type="range"
+            min={500_000}
+            max={PRICE_MAX}
+            step={500_000}
+            value={maxPrice}
+            onChange={(e) => setMaxPrice(Number(e.target.value))}
+            className="w-44 accent-[var(--accent)]"
+          />
+        </FilterField>
+
+        <FilterField label="פער משומה מינ׳">
+          <div className="flex gap-1">
+            {DISCOUNT_PRESETS.map((p) => (
+              <button
+                key={p}
+                onClick={() => setMinDiscount(p)}
+                className={`num rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
+                  minDiscount === p
+                    ? "border-accent bg-accent-soft text-accent"
+                    : "border-border bg-surface-2 text-muted hover:text-primary"
+                }`}
+              >
+                {p === 0 ? "הכל" : `${p}%+`}
+              </button>
+            ))}
+          </div>
+        </FilterField>
+
+        <FilterField label="ציון עסקה מינ׳">
+          <div className="flex gap-1">
+            {SCORE_PRESETS.map((p) => {
+              // 60+ stays open — the feed has to be useful without paying.
+              // What PRO buys is the sharp end of it, which is exactly what
+              // the pricing table has promised all along.
+              const locked = isScorePresetLocked(tier, p);
+              return (
                 <button
                   key={p}
-                  onClick={() => setMinDiscount(p)}
-                  className={`num rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
-                    minDiscount === p
+                  onClick={() => {
+                    if (locked) {
+                      trackEvent("limit_hit", { kind: "score_filter", tier, preset: p });
+                      return show({ feature: "score_filter" });
+                    }
+                    setMinScore(p);
+                  }}
+                  title={locked ? "סינון ציון 80+ פתוח למנויי PRO" : undefined}
+                  className={`num inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
+                    minScore === p
                       ? "border-accent bg-accent-soft text-accent"
-                      : "border-border bg-surface-2 text-muted hover:text-primary"
+                      : locked
+                        ? "border-border bg-surface-2 text-faint hover:border-accent/50 hover:text-accent"
+                        : "border-border bg-surface-2 text-muted hover:text-primary"
                   }`}
                 >
-                  {p === 0 ? "הכל" : `${p}%+`}
+                  {p === 0 ? "הכל" : `${p}+`}
+                  {locked && <Crown size={11} aria-label="PRO" />}
                 </button>
-              ))}
-            </div>
-          </FilterField>
-
-          <FilterField label="ציון עסקה מינ׳">
-            <div className="flex gap-1">
-              {SCORE_PRESETS.map((p) => {
-                // 60+ stays open — the feed has to be useful without paying.
-                // What PRO buys is the sharp end of it, which is exactly what
-                // the pricing table has promised all along.
-                const locked = isScorePresetLocked(tier, p);
-                return (
-                  <button
-                    key={p}
-                    onClick={() => {
-                      if (locked) {
-                        trackEvent("limit_hit", { kind: "score_filter", tier, preset: p });
-                        return show({ feature: "score_filter" });
-                      }
-                      setMinScore(p);
-                    }}
-                    title={locked ? "סינון ציון 80+ פתוח למנויי PRO" : undefined}
-                    className={`num inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
-                      minScore === p
-                        ? "border-accent bg-accent-soft text-accent"
-                        : locked
-                          ? "border-border bg-surface-2 text-faint hover:border-accent/50 hover:text-accent"
-                          : "border-border bg-surface-2 text-muted hover:text-primary"
-                    }`}
-                  >
-                    {p === 0 ? "הכל" : `${p}+`}
-                    {locked && <Crown size={11} aria-label="PRO" />}
-                  </button>
-                );
-              })}
-            </div>
-          </FilterField>
-
-          <FilterField label="שלב המכרז">
-            <div className="flex gap-1">
-              {FILTERABLE_PHASES.map((ph) => (
-                <button
-                  key={ph}
-                  onClick={() => togglePhase(ph)}
-                  title={
-                    ph === "not_started"
-                      ? "מכרזים שפורסמו אך ההגשה בהם טרם נפתחה"
-                      : "מכרזים שניתן להגיש אליהם הצעות כעת"
-                  }
-                  className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${
-                    phases.includes(ph)
-                      ? "border-accent bg-accent-soft text-accent"
-                      : "border-border bg-surface-2 text-muted hover:text-primary"
-                  }`}
-                >
-                  {PHASE_LABEL[ph]}
-                </button>
-              ))}
-            </div>
-          </FilterField>
-
-          <FilterField label="סוג עסקה">
-            <div className="flex flex-wrap gap-1">
-              {DEAL_TYPES.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => toggleType(t)}
-                  className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${
-                    types.includes(t)
-                      ? "border-accent bg-accent-soft text-accent"
-                      : "border-border bg-surface-2 text-muted hover:text-primary"
-                  }`}
-                >
-                  {DEAL_TYPE_LABEL[t]}
-                </button>
-              ))}
-            </div>
-          </FilterField>
-
-          <FilterField label="סינון חכם">
-            <button
-              onClick={() => {
-                // Without the projection this filter would match nothing, so a
-                // free account is told why rather than shown an empty feed.
-                if (premiumLocked) {
-                  trackEvent("limit_hit", { kind: "premium_calculator", tier, from: "smart_filter" });
-                  return show({ feature: "premium_calculator" });
-                }
-                setOnlyRealistic((v) => !v);
-              }}
-              title={
-                premiumLocked
-                  ? "סינון לפי פרמיית הזכייה החזויה פתוח למנויי PRO"
-                  : "מציג רק מכרזים שגם לאחר פרמיית הזכייה החזויה צפויים להישאר מתחת לשומה"
-              }
-              className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
-                onlyRealistic
-                  ? "border-positive bg-positive-soft text-positive"
-                  : "border-border bg-surface-2 text-muted hover:text-primary"
-              }`}
-            >
-              <Gavel size={13} /> מתחת לשומה גם אחרי פרמיה
-              {premiumLocked && <Crown size={11} />}
-            </button>
-          </FilterField>
-
-          <div className="ms-auto flex items-center gap-2">
-            {activeFilterCount > 0 && (
-              <button
-                onClick={reset}
-                className="rounded-lg px-3 py-2 text-xs font-medium text-muted transition hover:text-primary"
-              >
-                ניקוי ({activeFilterCount})
-              </button>
-            )}
-            <Link
-              href={buildAlertHref({
-                city: city || undefined,
-                // Only a budget that actually narrows the feed is worth carrying.
-                maxPrice: maxPrice < PRICE_MAX ? maxPrice : undefined,
-                minDiscount,
-                minScore,
-                types,
-                phases,
-              })}
-              title="פתיחת טופס התראה עם הסינון הנוכחי"
-              className="flex items-center gap-1.5 rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs font-semibold text-primary transition hover:border-border-strong"
-            >
-              <BellPlus size={14} /> שמירת סינון כהתראה
-            </Link>
+              );
+            })}
           </div>
-        </div>
+        </FilterField>
+
+        <FilterField label="שלב המכרז">
+          <div className="flex gap-1">
+            {FILTERABLE_PHASES.map((ph) => (
+              <button
+                key={ph}
+                onClick={() => togglePhase(ph)}
+                title={
+                  ph === "not_started"
+                    ? "מכרזים שפורסמו אך ההגשה בהם טרם נפתחה"
+                    : "מכרזים שניתן להגיש אליהם הצעות כעת"
+                }
+                className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${
+                  phases.includes(ph)
+                    ? "border-accent bg-accent-soft text-accent"
+                    : "border-border bg-surface-2 text-muted hover:text-primary"
+                }`}
+              >
+                {PHASE_LABEL[ph]}
+              </button>
+            ))}
+          </div>
+        </FilterField>
+
+        <FilterField label="סוג עסקה">
+          <div className="flex flex-wrap gap-1">
+            {DEAL_TYPES.map((t) => (
+              <button
+                key={t}
+                onClick={() => toggleType(t)}
+                className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition ${
+                  types.includes(t)
+                    ? "border-accent bg-accent-soft text-accent"
+                    : "border-border bg-surface-2 text-muted hover:text-primary"
+                }`}
+              >
+                {DEAL_TYPE_LABEL[t]}
+              </button>
+            ))}
+          </div>
+        </FilterField>
+
+        <FilterField label="סינון חכם">
+          <button
+            onClick={() => {
+              // Without the projection this filter would match nothing, so a
+              // free account is told why rather than shown an empty feed.
+              if (premiumLocked) {
+                trackEvent("limit_hit", { kind: "premium_calculator", tier, from: "smart_filter" });
+                return show({ feature: "premium_calculator" });
+              }
+              setOnlyRealistic((v) => !v);
+            }}
+            title={
+              premiumLocked
+                ? "סינון לפי פרמיית הזכייה החזויה פתוח למנויי PRO"
+                : "מציג רק מכרזים שגם לאחר פרמיית הזכייה החזויה צפויים להישאר מתחת לשומה"
+            }
+            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
+              onlyRealistic
+                ? "border-positive bg-positive-soft text-positive"
+                : "border-border bg-surface-2 text-muted hover:text-primary"
+            }`}
+          >
+            <Gavel size={13} /> מתחת לשומה גם אחרי פרמיה
+            {premiumLocked && <Crown size={11} />}
+          </button>
+        </FilterField>
+          </div>
+        )}
       </div>
 
       {/* Result meta + sort + view toggle */}
@@ -386,8 +463,11 @@ export function DealFeed({
             <X size={12} />
           </button>
         )}
-        <div className="ms-auto flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-muted">
+        {/* Wraps on a phone. Held on one line, the sort control and the three
+            view toggles together are wider than a 375px screen and pushed the
+            whole page into a sideways scroll. */}
+        <div className="ms-auto flex flex-wrap items-center gap-3">
+          <label className="flex min-w-0 items-center gap-2 text-sm text-muted">
             מיון:
             <select
               value={sort}
@@ -401,7 +481,7 @@ export function DealFeed({
                 }
                 setSort(next);
               }}
-              className="input"
+              className="input min-w-0"
             >
               <option value="score">ציון עסקה</option>
               <option value="expected_gap">
@@ -439,7 +519,7 @@ export function DealFeed({
       ) : effectiveView === "table" ? (
         <DealTable deals={filtered} premiumLocked={premiumLocked} tier={tier} show={show} />
       ) : (
-        <DealCards deals={filtered} premiumLocked={premiumLocked} tier={tier} show={show} />
+        <DealCards deals={filtered} />
       )}
     </div>
   );
@@ -561,94 +641,121 @@ function DealTable({ deals, premiumLocked, tier, show }: { deals: Deal[] } & Pre
   );
 }
 
-function DealCards({ deals, premiumLocked, tier, show }: { deals: Deal[] } & PremiumGate) {
+function DealCards({ deals }: { deals: Deal[] }) {
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-5">
       {deals.map((d) => (
-        <Link
-          key={d.id}
-          href={`/deal/${d.id}`}
-          className="card-hover group flex flex-col rounded-xl border border-border bg-surface p-4 shadow-[var(--shadow)] transition hover:border-border-strong"
-        >
-          <div className="mb-3 flex items-start justify-between gap-2">
-            <div>
-              <h3 className="font-bold text-primary group-hover:text-accent">
-                {[d.city, d.neighborhood].filter(Boolean).join(" · ")}
-              </h3>
-              <p className="text-xs text-muted">{d.propertyType}</p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <SaveDealButton dealId={d.id} />
-              <ScoreChip score={d.dealScore} />
-            </div>
-          </div>
-          <div className="mb-3 flex items-baseline justify-between">
-            <span className="num text-2xl font-extrabold text-primary" dir="ltr">
-              {formatILS(d.askingPrice)}
-            </span>
-            <DiscountTag pct={d.discountPct} />
-          </div>
-          <div className="mb-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
-            <span>{formatLandArea(d.areaSqm)}</span>
-            <span>·</span>
-            <span>ייעוד: {d.zoning}</span>
-          </div>
-          {premiumLocked && (
-            <button
-              type="button"
-              onClick={() => {
-                trackEvent("limit_hit", { kind: "premium_calculator", tier });
-                show({ feature: "premium_calculator" });
-              }}
-              className="mb-3 flex w-full items-center justify-between rounded-lg border border-dashed border-accent/40 px-2.5 py-1.5 text-xs transition hover:bg-accent-soft"
-            >
-              <span className="flex items-center gap-1 text-muted">
-                <Gavel size={12} /> פרמיית זכייה
-              </span>
-              <span className="inline-flex items-center gap-1 font-bold text-accent">
-                <Crown size={11} /> PRO
-              </span>
-            </button>
-          )}
-          {!premiumLocked && d.winningPremium != null && (
-            <div className="mb-3 flex items-center justify-between rounded-lg bg-surface-2 px-2.5 py-1.5 text-xs">
-              <span className="flex items-center gap-1 text-muted">
-                <Gavel size={12} /> פרמיית זכייה
-              </span>
-              <span className="flex items-center gap-2">
-                <span className="num font-bold text-accent" dir="ltr">
-                  +{Math.round(d.winningPremium * 100)}%
-                </span>
-                {d.expectedGapPct != null && (
-                  <span
-                    className={`text-[10px] font-semibold ${
-                      d.expectedGapPct > 0 ? "text-positive" : "text-warning"
-                    }`}
-                  >
-                    {d.expectedGapPct > 0
-                      ? `חזוי ${Math.round(d.expectedGapPct)}% מתחת`
-                      : `חזוי ${Math.abs(Math.round(d.expectedGapPct))}% מעל`}
-                  </span>
-                )}
-              </span>
-            </div>
-          )}
-
-          <div className="mb-3 flex flex-wrap gap-1">
-            <DealTypeChip type={d.dealType} />
-            {d.badges.map((b) => (
-              <DealBadge key={b} kind={b} />
-            ))}
-          </div>
-          <div className="mt-auto flex items-center justify-between border-t border-border pt-3 text-xs">
-            <DeadlineCell deal={d} />
-            <span className="inline-flex items-center gap-1 font-semibold text-accent">
-              פרטים <ArrowLeft size={14} />
-            </span>
-          </div>
-        </Link>
+        <DealCard key={d.id} deal={d} />
       ))}
     </div>
+  );
+}
+
+/**
+ * The one reason this tender is worth opening, in the deal's own words.
+ *
+ * Ordered by what actually argues for the plot rather than by what is
+ * loudest: a gap under the official appraisal is the product's whole premise,
+ * upside comes next, and a pressured seller after that. "זמן קצר להגשה" is
+ * deliberately not here — a closing date is urgency, not a reason the deal is
+ * good, and dressing it as one would recommend every expiring tender equally.
+ */
+const WHY_GOOD_ORDER: BadgeKind[] = [
+  "below_average",
+  "rezoning_potential",
+  "motivated_seller",
+];
+
+function whyGood(d: Deal): { label: string; kind: BadgeKind } | null {
+  const kind = WHY_GOOD_ORDER.find((b) => d.badges.includes(b));
+  if (kind) return { label: BADGE_LABEL[kind], kind };
+  // No badge, but the numbers can still carry the card: a real gap under the
+  // appraisal is worth saying even when nothing flagged it.
+  if (d.discountPct >= 10) return { label: `${Math.round(d.discountPct)}% מתחת לשומה`, kind: "below_average" };
+  return null;
+}
+
+/**
+ * A tender at a glance: where it is, how it scores, what it costs, and the one
+ * reason to look closer.
+ *
+ * Four things, deliberately. Everything else — zoning, area, the premium
+ * projection, the comparables, the deal-type chip, the rest of the badges —
+ * is in the drawer a click away. A card carrying nine facts is not nine times
+ * as useful; it is a paragraph that has to be read in full before any two
+ * tenders can be told apart, and a full screen of them is why this feed read
+ * as a wall.
+ *
+ * The exception is a submission date that changes whether you can act at all
+ * — already closing, or not yet open. That is not a metric competing for
+ * attention, it is the difference between a live tender and one you cannot
+ * bid on, so it earns the footer when it applies and stays out of the way
+ * when it does not.
+ */
+function DealCard({ deal: d }: { deal: Deal }) {
+  const why = whyGood(d);
+  const { label: dateLabel, urgent, phase } = submissionInfo(d);
+  // Only when the date is the story. A tender open for another two months has
+  // nothing here, which is most of them.
+  const showDate = urgent || phase === "not_started" || phase === "closed";
+
+  return (
+    <Link
+      href={`/deal/${d.id}`}
+      className="card-hover group flex flex-col gap-5 rounded-2xl border border-border bg-surface p-6 shadow-[var(--shadow)] transition hover:border-accent/50"
+    >
+      {/* Title + score. The gauge is the anchor the eye lands on, so it keeps
+          its own corner at full size rather than shrinking into the header. */}
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-lg leading-tight font-extrabold text-primary transition group-hover:text-accent">
+            {d.city}
+          </h3>
+          {d.neighborhood && (
+            <p className="mt-1 truncate text-sm text-muted">{d.neighborhood}</p>
+          )}
+        </div>
+        <ScoreChip score={d.dealScore} size="lg" />
+      </div>
+
+      {/* Price, and what it is cheap against. */}
+      <div>
+        <div className="num text-3xl leading-none font-black text-primary" dir="ltr">
+          {formatILS(d.askingPrice)}
+        </div>
+        <div className="mt-2 flex items-baseline gap-1.5 text-sm">
+          <DiscountTag pct={d.discountPct} />
+          <span className="text-muted">משומה רשמית</span>
+        </div>
+      </div>
+
+      {/* The single reason. */}
+      {why && (
+        <div>
+          <DealBadge kind={why.kind} label={why.label} size="md" />
+        </div>
+      )}
+
+      <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-4 text-xs">
+        <div onClick={(e) => e.preventDefault()}>
+          <SaveDealButton dealId={d.id} />
+        </div>
+        {showDate ? (
+          <span
+            className={`inline-flex items-center gap-1 font-medium ${
+              phase === "not_started" ? "text-accent" : "text-warning"
+            }`}
+          >
+            {phase === "not_started" ? <CalendarClock size={13} /> : <Clock size={13} />}
+            {dateLabel}
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 font-semibold text-accent">
+            פרטים <ArrowLeft size={14} />
+          </span>
+        )}
+      </div>
+    </Link>
   );
 }
 

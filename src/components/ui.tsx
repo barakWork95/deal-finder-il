@@ -21,14 +21,25 @@ const BADGE_ICON: Record<BadgeKind, LucideIcon> = {
   not_started: CalendarClock,
 };
 
-export function DealBadge({ kind }: { kind: BadgeKind }) {
+export function DealBadge({
+  kind,
+  label,
+  size = "sm",
+}: {
+  kind: BadgeKind;
+  /** Overrides the badge's stock wording, for a reason stated in the deal's own numbers. */
+  label?: string;
+  size?: "sm" | "md";
+}) {
   const Icon = BADGE_ICON[kind];
+  const dims =
+    size === "md" ? "gap-1.5 px-2.5 py-1 text-xs" : "gap-1 px-2 py-0.5 text-[11px]";
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium whitespace-nowrap ${BADGE_STYLE[kind]}`}
+      className={`inline-flex items-center rounded-md font-medium whitespace-nowrap ${dims} ${BADGE_STYLE[kind]}`}
     >
-      <Icon size={12} aria-hidden />
-      {BADGE_LABEL[kind]}
+      <Icon size={size === "md" ? 13 : 12} aria-hidden />
+      {label ?? BADGE_LABEL[kind]}
     </span>
   );
 }
