@@ -5,6 +5,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { MobileNav } from "@/components/MobileNav";
 import { AuthProvider } from "@/components/AuthProvider";
 import { UpgradeGateProvider } from "@/components/UpgradeGate";
+import { Analytics } from "@vercel/analytics/next";
 
 // Hebrew UI: Assistant — modern, elegant, highly legible in both themes.
 const assistant = Assistant({
@@ -63,6 +64,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <MobileNav />
           </UpgradeGateProvider>
         </AuthProvider>
+        {/* Vercel Web Analytics: visitors and page views. Renders nothing and
+            only loads its script on a Vercel deployment, so local development
+            and CI are unaffected.
+
+            Complementary to /api/events rather than a replacement — that
+            records product intent (pricing_view, upgrade_click, limit_hit) in
+            our own database, which is what the funnel on /admin is built from.
+            This answers the question that one cannot: how many people arrive
+            at all. */}
+        <Analytics />
       </body>
     </html>
   );
