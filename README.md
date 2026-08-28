@@ -1,27 +1,157 @@
 <img src="public/brand/karkahot-logo.png" alt="קרקעHOT" width="260">
 
-# קרקעHOT — מכרזי קרקע ומגרשים בישראל
+# קרקעHOT — Israeli land-tender intelligence
 
-Hebrew-first, RTL PropTech platform that aggregates Israeli real-estate
-opportunities (foreclosures / כונסי נכסים, רמ״י tenders, price drops), benchmarks
-them against historical tax-authority transactions (נדל״ן-נט), computes a **Deal
-Score**, and sends alerts.
+A Hebrew-first, RTL PropTech platform that aggregates Israeli land
+opportunities — רמ״י tenders, foreclosures (כונסי נכסים), price drops — scores
+them against real historical transaction data, and tells you which ones are
+actually worth bidding on.
 
-Stack: **Next.js 16** (App Router) · **React 19** · **Tailwind v4** · **Postgres**
-(local now, **Supabase**-ready) with `earthdistance` proximity (PostGIS optional).
+**Live:** https://deal-finder-il.vercel.app · **Status:** archived, feature-complete
+
+> Built solo as a full-stack product, not a demo: real ingestion from government
+> sources, a real Postgres schema, real auth, real subscription billing, and a
+> paid analytics tier with a gate that holds up to a network tab.
 
 ---
 
-## Quick start
+## What it does
+
+Israeli land tenders are published as raw tables of numbers. The opening bid is
+not the price you pay, the "discount" is not a discount, and roughly half of
+what is listed cannot be bid on today. This app turns that into something a
+buyer can scan.
+
+- **~355 live tenders**, ingested from the Israel Land Authority portal and
+  benchmarked against genuine tax-authority comparables.
+- **A Deal Score (0–100)** per plot, from the gap to the official appraisal
+  (שומה), rezoning upside, and submission urgency.
+- **An honest gap.** `asking_price` is the minimum bid **plus** development
+  costs, and the headline number is a gap versus appraisal — never presented as
+  a guaranteed discount, because tenders are competitive and winning bids land
+  higher.
+
+## Key features
+
+### Progressive-disclosure UI
+The feed opens on cards carrying four things — where the plot is, how it
+scores, what it costs, and the single strongest reason to look closer. Filters
+collapse to one row and summarise themselves when active. Clicking a tender
+opens it **over** the feed, led by a verdict panel (the score, the three
+numbers behind it, and why it is worth the time) with the deep analysis behind
+tabs.
+
+The drawer is a Next.js **parallel + intercepting route**, not a client modal,
+so `/deal/[id]` remains a real URL: shareable, refreshable, and fully rendered
+without JavaScript.
+
+### Tender feed
+Card, table and map views over the same filtered set. Filters for city, budget,
+gap to appraisal, Deal Score, tender phase and deal type — with phase derived
+from the dates at render time rather than a stored flag that would go stale.
+Full-text search across city, area and גוש/חלקה. Any filter combination can be
+saved directly as an alert.
+
+### PRO analytics, and a gate that actually holds
+The paid feature is the **winning-premium projection**: how much past winners
+in the same city and zoning paid over the minimum bid, and what that implies
+this plot will actually cost.
+
+The interesting part is the gate. Every surface that could serve the projection
+**strips it server-side before it reaches the client**, because a value merely
+*styled* as locked is still sitting in the RSC payload for anyone who opens
+devtools. Free accounts still see the basis of the calculation — minimum bid,
+appraisal, sample size — so the offer is legible, but the two numbers that are
+the product never leave the server. The client components that render the
+drawer and its tabs are deliberately shells: they receive markup and never see
+a `Deal`.
+
+### Alerts, billing, admin
+Saved searches deliver over **WhatsApp and email**, including a second message
+when a not-yet-open tender starts accepting bids. **PayPal subscriptions** for
+PRO, with webhook signatures verified locally rather than trusting the
+callback's own `SUCCESS`. An `/admin` dashboard covering users, plans,
+ingestion failures and a conversion funnel.
+
+### Map
+Leaflet view of every geocoded plot. The tender API carries no coordinates, so
+plots are resolved via their גוש/חלקה against the national parcel layer;
+`geo_precision` records whether a pin is a true parcel centroid or a settlement
+fallback, and the map labels the latter as approximate rather than passing it
+off as the plot.
+
+## Tech stack
+
+| Layer | Choice |
+|---|---|
+| Framework | **Next.js 16** (App Router, RSC, parallel + intercepting routes) |
+| Language | **TypeScript** (strict) |
+| UI | **React 19**, **Tailwind CSS v4**, lucide-react, RTL Hebrew-first |
+| Database | **PostgreSQL** (Supabase in production) |
+| DB access | **postgres.js** — raw tagged-template SQL, no ORM |
+| Migrations | 18 hand-written `.sql` files in `db/`, applied via `psql` |
+| Auth | **Clerk** (Google + email), fully optional at runtime |
+| Billing | **PayPal** subscriptions with self-verified webhooks |
+| Maps | **Leaflet** + open national parcel data |
+| Hosting | **Vercel** (production + per-branch previews) |
+| CI | GitHub Actions — lint, tests, build on every PR |
+
+There is **no ORM**. Queries are written as SQL through `postgres.js`, and
+`src/lib/types.ts` mirrors the schema by hand. Tests are `node --test`.
+
+## Running locally
+
+Requires Node 20+ and, optionally, `psql` on your PATH.
 
 ```bash
+git clone https://github.com/barakWork95/deal-finder-il.git
+cd deal-finder-il
 npm install
-cp .env.example .env.local        # set DATABASE_URL
-npm run db:reset                  # migrate + seed (needs psql on PATH)
+cp .env.example .env.local
 npm run dev                       # http://localhost:3000
 ```
 
-Pages: `/` deal feed · `/deal/[id]` deal detail (CMA + ROI calculator) · `/alerts`.
+**It runs with no configuration at all.** With no `DATABASE_URL`, the
+repository layer falls back to in-memory mock tenders; with no Clerk keys,
+`isAuthConfigured()` disables every auth touchpoint and the header shows an
+inert avatar. Nothing crashes, nothing blanks — you get a browsable app
+immediately. This is also why CI needs no secrets.
+
+For the full dataset:
+
+```bash
+# set DATABASE_URL in .env.local first
+npm run db:reset                  # migrate + seed
+npm run db:ingest:rami            # live tenders from the Israel Land Authority
+npm run db:geocode                # resolve גוש/חלקה → coordinates for the map
+```
+
+Checks:
+
+```bash
+npm run lint
+npm test
+npm run build
+```
+
+Routes: `/` feed · `/deal/[id]` tender detail · `/alerts` · `/account` · `/admin`.
+
+## Engineering notes worth reading
+
+A few decisions in this codebase are documented at length in the source, where
+the reasoning matters more than the code:
+
+- `src/app/page.tsx` — why the PRO fields are stripped from the payload rather
+  than hidden in the component.
+- `src/components/DealDetailBody.tsx` — why the tender's deep view is a server
+  component, and what breaks if it is not.
+- `src/components/DealDrawer.tsx` — why "open in full page" is a plain `<a>`
+  and not a `<Link>`.
+- `src/lib/limits.ts` — why an unknown plan falls back to the free *plan* and
+  not a free *value* (a `??` here once held every PRO account to the free
+  limits).
+- `src/lib/tender-phase.ts` — why a tender's phase is derived from the clock at
+  render time instead of stored.
 
 ## Data layer
 
@@ -93,8 +223,8 @@ settlement is rejected as a bad גוש match and falls back to the settlement.
 
 ## CI & branching
 
-`.github/workflows/ci.yml` runs `npm ci`, `npm run lint` and `npm run build` on
-every pull request and on pushes to `main` and `staging`. It needs **no
+`.github/workflows/ci.yml` runs `npm ci`, `npm run lint`, `npm test` and
+`npm run build` on every pull request and on pushes to `main` and `staging`. It needs **no
 secrets**: without `DATABASE_URL` the repository layer falls back to mock data,
 auth is guarded by `isAuthConfigured`, and every page that reads tenders is
 `force-dynamic`, so nothing touches Postgres at build time.
