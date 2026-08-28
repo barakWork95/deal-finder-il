@@ -10,7 +10,7 @@ Access is `ADMIN_USER_IDS`: a comma-separated list of Clerk user ids, read on
 the server (`src/lib/admin.ts`).
 
 ```bash
-ADMIN_USER_IDS=user_3Hrkt0YemnQrC4LXdwMY5VvZyoP
+ADMIN_USER_IDS=user_2abcDEFghiJKLmnoPQRstuVWxyz   # your Clerk user id, from the Clerk dashboard
 ```
 
 - **Unset in production → nobody gets in.** The route answers `notFound()`, so
